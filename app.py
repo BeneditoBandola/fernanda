@@ -6,6 +6,7 @@ import pytz
 import pandas as pd
 import tempfile
 import speech_recognition as sr
+import pydeck as pdk
 
 # Page config
 st.set_page_config(
@@ -127,11 +128,42 @@ if menu == "Relação de Clientes & Endereços":
         colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'OBS', 'OBS_2', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
         st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
         
+        # Mapa Profissional Interativo com PyDeck
         if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns:
-            df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE'])
+            df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE']).copy()
             if not df_mapa.empty:
-                st.markdown("### 🗺️ Mapa dos Clientes")
-                st.map(df_mapa, latitude='LATITUDE', longitude='LONGITUDE', zoom=11)
+                st.markdown("### 🗺️ Mapa Interativo dos Clientes da Rota")
+                
+                lat_centro = df_mapa['LATITUDE'].mean()
+                lon_centro = df_mapa['LONGITUDE'].mean()
+                
+                layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=df_mapa,
+                    get_position='[LONGITUDE, LATITUDE]',
+                    get_color='[226, 0, 26, 200]',
+                    get_radius=300,
+                    pickable=True,
+                    auto_highlight=True,
+                )
+                
+                view_state = pdk.ViewState(
+                    latitude=lat_centro,
+                    longitude=lon_centro,
+                    zoom=12,
+                    pitch=0,
+                )
+                
+                r = pdk.Deck(
+                    layers=[layer],
+                    initial_view_state=view_state,
+                    tooltip={
+                        "html": "<b>Cliente:</b> {NOME}<br/><b>Endereço:</b> {ENDEREÇO}<br/><b>Cidade:</b> {CIDADE}",
+                        "style": {"background": "black", "color": "white", "font-family": "sans-serif", "z-index": "10000"}
+                    }
+                )
+                
+                st.pydeck_chart(r)
 
 elif menu == "Nova Visita / Check-in":
     st.subheader("📝 Registrar Atendimento em PDV")
@@ -178,7 +210,8 @@ elif menu == "Nova Visita / Check-in":
             promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
             
             st.markdown("📅 **Data da Visita**")
-            data_visita = st.date_input("Data da Visita", value=datetime.now(FUSO_SP), label_visibility="collapsed")
+            data_atual_sp = datetime.now(FUSO_SP).date()
+            data_visita_input = st.text_input("Digite a data (DD/MM/AAAA)", value=data_atual_sp.strftime("%d/%m/%Y"))
             
             st.markdown("### 📸 Fotos do Ponto de Venda")
             fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
@@ -238,12 +271,11 @@ elif menu == "Nova Visita / Check-in":
                                 f_out.write(f.getbuffer())
                             fotos_salvas.append(f_path)
                     
-                    data_formatada = data_visita.strftime('%d/%m/%Y')
                     hora_envio = datetime.now(FUSO_SP).strftime('%H:%M')
                     
                     nova_visita = {
                         "id": datetime.now(FUSO_SP).strftime('%Y%m%d%H%M%S'),
-                        "data": data_formatada,
+                        "data": data_visita_input,
                         "hora": hora_envio,
                         "promotora": promotora_nome,
                         "codigo": str(cliente_info.get('CODIGO', '')),
