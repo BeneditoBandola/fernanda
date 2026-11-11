@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
+import pytz
 import pandas as pd
 import tempfile
 import speech_recognition as sr
@@ -15,6 +16,7 @@ st.set_page_config(
 
 DATA_FILE = "visitas_dados.json"
 EXCEL_FILE = "clientes com coordenadas.xlsx"
+FUSO_SP = pytz.timezone('America/Sao_Paulo')
 
 # Specific client codes for the route
 CLIENTE_CODES_ROTA = [
@@ -99,7 +101,8 @@ st.title("App de Roteiro e Visitas - Promotora")
 st.markdown("Consulte a relação dos clientes da rota, filtre por cidade, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
 
 st.sidebar.header("Navegação")
-menu = st.sidebar.selectbox("Escolha a opção", ["Relação de Clientes & Endereços", "Nova Visita / Check-in", "Histórico de Visitas & PDF"])
+menu_opcoes = ["Nova Visita / Check-in", "Relação de Clientes & Endereços", "Histórico de Visitas & PDF"]
+menu = st.sidebar.selectbox("Escolha a opção", menu_opcoes, index=0)
 
 if menu == "Relação de Clientes & Endereços":
     st.subheader("📋 Relação de Clientes e Endereços da Rota")
@@ -173,13 +176,15 @@ elif menu == "Nova Visita / Check-in":
             st.markdown("---")
             
             promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
-            data_visita = st.date_input("Data da Visita", value=datetime.now())
+            
+            st.markdown("📅 **Data da Visita**")
+            data_visita = st.date_input("Data da Visita", value=datetime.now(FUSO_SP), label_visibility="collapsed")
             
             st.markdown("### 📸 Fotos do Ponto de Venda")
             fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
             
             st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-            st.info("💡 A promotora pode ditar o áudio ou escrever el relato do que tem de produtos e o que foi arrumado.")
+            st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
             
             if 'texto_transcrito_voz' not in st.session_state:
                 st.session_state['texto_transcrito_voz'] = ""
@@ -228,16 +233,16 @@ elif menu == "Nova Visita / Check-in":
                     os.makedirs("fotos_visitas", exist_ok=True)
                     if fotos_upload:
                         for idx, f in enumerate(fotos_upload):
-                            f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
+                            f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
                             with open(f_path, "wb") as f_out:
                                 f_out.write(f.getbuffer())
                             fotos_salvas.append(f_path)
                     
                     data_formatada = data_visita.strftime('%d/%m/%Y')
-                    hora_envio = datetime.now().strftime('%H:%M')
+                    hora_envio = datetime.now(FUSO_SP).strftime('%H:%M')
                     
                     nova_visita = {
-                        "id": datetime.now().strftime('%Y%m%d%H%M%S'),
+                        "id": datetime.now(FUSO_SP).strftime('%Y%m%d%H%M%S'),
                         "data": data_formatada,
                         "hora": hora_envio,
                         "promotora": promotora_nome,
@@ -303,7 +308,7 @@ elif menu == "Histórico de Visitas & PDF":
             subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor("#4A5568"), spaceAfter=20)
             
             story.append(Paragraph("Relatório de Visitas e Execução em PDV", title_style))
-            story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", subtitle_style))
+            story.append(Paragraph(f"Gerado em: {datetime.now(FUSO_SP).strftime('%d/%m/%Y às %H:%M')}", subtitle_style))
             story.append(Spacer(1, 10))
             
             for v in dados:
