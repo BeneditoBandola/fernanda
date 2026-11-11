@@ -45,10 +45,13 @@ def carregar_clientes():
     if os.path.exists(EXCEL_FILE):
         try:
             df_excel = pd.read_excel(EXCEL_FILE, engine='openpyxl')
-            df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\\.0$', '', regex=True)
+            
+            # Limpeza robusta do Código para garantir o match exato
+            df_excel['CODIGO'] = pd.to_numeric(df_excel['CODIGO'], errors='coerce').fillna(0).astype(int).astype(str)
+            
             df_filtrado = df_excel[df_excel['CODIGO'].isin(CLIENTE_CODES_ROTA)].copy()
             
-            # Converter latitude e longitude para formato numérico correto (substituindo vírgula por ponto se necessário)
+            # Converter latitude e longitude para formato numérico correto
             for col in ['LATITUDE', 'LONGITUDE']:
                 if col in df_filtrado.columns:
                     if df_filtrado[col].dtype == object:
@@ -176,7 +179,7 @@ elif menu == "Nova Visita / Check-in":
             fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
             
             st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-            st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
+            st.info("💡 A promotora pode ditar o áudio ou escrever el relato do que tem de produtos e o que foi arrumado.")
             
             if 'texto_transcrito_voz' not in st.session_state:
                 st.session_state['texto_transcrito_voz'] = ""
