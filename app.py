@@ -14,6 +14,14 @@ st.set_page_config(
 DATA_FILE = "visitas_dados.json"
 EXCEL_FILE = "clientes com coordenadas.xlsx"
 
+# Specific client codes for the route
+CLIENTE_CODES_ROTA = [
+    "23485", "28572", "21115", "21816", "21609", "21161", "21648", 
+    "23128", "24334", "23804", "21918", "23754", "26377", "21933", 
+    "21121", "21927", "21522", "21917", "24724", "24270", "27010", 
+    "21921", "21874"
+]
+
 # Load saved visits
 def carregar_dados():
     if os.path.exists(DATA_FILE):
@@ -29,15 +37,16 @@ def salvar_dados(dados):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Load clients from Excel file on GitHub
+# Load clients from Excel file on GitHub and filter only route clients
 @st.cache_data
 def carregar_clientes():
     if os.path.exists(EXCEL_FILE):
         try:
             df_excel = pd.read_excel(EXCEL_FILE, engine='openpyxl')
-            # Clean columns
             df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
-            return df_excel
+            # Filter only specific route clients
+            df_filtrado = df_excel[df_excel['CODIGO'].isin(CLIENTE_CODES_ROTA)].copy()
+            return df_filtrado
         except Exception as e:
             st.error(f"Erro ao ler a planilha: {e}")
             return pd.DataFrame()
@@ -46,18 +55,17 @@ def carregar_clientes():
 df_clientes = carregar_clientes()
 
 st.title("🛒 App de Roteiro e Visitas - Promotora")
-st.markdown("Consulte a relação de clientes e endereços da planilha do GitHub, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
+st.markdown("Consulte a relação dos clientes da rota, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
 
 st.sidebar.header("Navegação")
 menu = st.sidebar.selectbox("Escolha a opção", ["Relação de Clientes & Endereços", "Nova Visita / Check-in", "Histórico de Visitas & PDF"])
 
 if menu == "Relação de Clientes & Endereços":
-    st.subheader("📋 Relação de Clientes e Endereços (Planilha do GitHub)")
+    st.subheader("📋 Relação de Clientes e Endereços da Rota")
     
     if df_clientes.empty:
-        st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado no repositório ou ocorreu um erro de leitura. Verifique se o nome do arquivo no GitHub é exatamente igual.")
+        st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado ou nenhum cliente da rota foi encontrado na planilha.")
     else:
-        # Search filter
         busca = st.text_input("🔍 Pesquisar por Nome, Código, Bairro ou Cidade", "")
         
         df_exibicao = df_clientes.copy()
@@ -65,24 +73,22 @@ if menu == "Relação de Clientes & Endereços":
             mask = df_exibicao.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
             df_exibicao = df_exibicao[df_exibicao.index.isin(df_exibicao[mask].index)]
             
-        st.info(f"Mostrando {len(df_exibicao)} cliente(s) cadastrados na planilha.")
+        st.info(f"Mostrando {len(df_exibicao)} cliente(s) da rota.")
         
-        # Show table with main columns
         colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
         st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
         
-        # Mapa interativo opcional
         if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns:
             df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE'])
             if not df_mapa.empty:
-                st.markdown("### 🗺️ Mapa dos Clientes")
+                st.markdown("### 🗺️ Mapa dos Clientes da Rota")
                 st.map(df_mapa, latitude='LATITUDE', longitude='LONGITUDE', zoom=11)
 
 elif menu == "Nova Visita / Check-in":
     st.subheader("📝 Registrar Atendimento em PDV")
     
     if df_clientes.empty:
-        st.warning("Nenhum cliente carregado da planilha do GitHub. Verifique o arquivo requirements.txt e o Excel.")
+        st.warning("Nenhum cliente carregado da planilha do GitHub.")
     else:
         df_clientes['OPCAO_STR'] = df_clientes['CODIGO'] + " - " + df_clientes['NOME'].fillna('') + " (" + df_clientes['CIDADE'].fillna('') + ")"
         cliente_opcoes = df_clientes['OPCAO_STR'].tolist()
