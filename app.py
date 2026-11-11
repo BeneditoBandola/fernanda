@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime
 import pandas as pd
+import tempfile
+import speech_recognition as sr
 
 # Page config
 st.set_page_config(
@@ -168,7 +170,45 @@ elif menu == "Nova Visita / Check-in":
             
             st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
             st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
-            relato_texto = st.text_area("Relato do Atendimento (Transcrito ou Digitado)", placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê...")
+            
+            if 'texto_transcrito_voz' not in st.session_state:
+                st.session_state['texto_transcrito_voz'] = ""
+            if 'audio_key_id' not in st.session_state:
+                st.session_state['audio_key_id'] = 0
+
+            audio_gravado = st.audio_input("🎙️ Grave o áudio falando as observações da loja:", key=f"audio_input_{st.session_state['audio_key_id']}")
+            
+            if audio_gravado is not None:
+                col_transc, col_apagar = st.columns([3, 1])
+                with col_transc:
+                    if st.button("✨ Transcrever Áudio em Texto"):
+                        with st.spinner("Interpretando e transcrevendo áudio..."):
+                            try:
+                                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as f_audio:
+                                    f_audio.write(audio_gravado.read())
+                                    caminho_audio_temp = f_audio.name
+
+                                r = sr.Recognizer()
+                                with sr.AudioFile(caminho_audio_temp) as source:
+                                    audio_data = r.record(source)
+                                    texto_falado = r.recognize_google(audio_data, language="pt-BR")
+                                    st.session_state['texto_transcrito_voz'] = texto_falado
+                                    st.success("✅ Áudio transcrito com sucesso!")
+                            except sr.UnknownValueError:
+                                st.warning("⚠️ Não foi possível entender o áudio. Tente falar mais perto.")
+                            except Exception as e:
+                                st.error(f"Erro ao transcrever: {e}")
+                with col_apagar:
+                    if st.button("🗑️ Apagar Tudo"):
+                        st.session_state['texto_transcrito_voz'] = ""
+                        st.session_state['audio_key_id'] += 1
+                        st.rerun()
+
+            relato_texto = st.text_area(
+                "Relato do Atendimento (Transcrito ou Digitado)",
+                value=st.session_state['texto_transcrito_voz'],
+                placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê..."
+            )
             
             if st.button("💾 Enviar e Salvar Visita", type="primary"):
                 if not relato_texto and not fotos_upload:
