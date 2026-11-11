@@ -7,7 +7,7 @@ import pandas as pd
 # Page config
 st.set_page_config(
     page_title="App de Visitas - Promotora",
-    page_icon="🛒",
+    page_icon="📍",
     layout="wide"
 )
 
@@ -84,7 +84,7 @@ def carregar_clientes():
 
 df_clientes = carregar_clientes()
 
-st.title("🛒 App de Roteiro e Visitas - Promotora")
+st.title("App de Roteiro e Visitas - Promotora")
 st.markdown("Consulte a relação dos clientes da rota, filtre por cidade, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
 
 st.sidebar.header("Navegação")
@@ -143,15 +143,24 @@ elif menu == "Nova Visita / Check-in":
             cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
             cliente_info = df_chk[df_chk['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
             
-            with st.expander("📍 Ver Endereço, Observações e Coordenadas"):
-                st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
-                st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
-                st.write(f"**Endereço:** {cliente_info.get('ENDEREÇO', '')} - Bairro: {cliente_info.get('BAIRRO', '')}")
-                st.write(f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} - {cliente_info.get('UF', '')}")
-                st.write(f"**Obs:** {cliente_info.get('OBS', '')}")
-                if cliente_info.get('OBS_2'):
-                    st.write(f"**Obs 2:** {cliente_info.get('OBS_2', '')}")
-                st.write(f"**Latitude / Longitude:** {cliente_info.get('LATITUDE', '')}, {cliente_info.get('LONGITUDE', '')}")
+            # Exibir Endereço, Observações e Link do Google Maps diretamente (sem expander)
+            st.markdown("---")
+            st.markdown("### 📍 Informações do Cliente Selecionado")
+            st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
+            st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
+            st.write(f"**Endereço:** {cliente_info.get('ENDEREÇO', '')} - Bairro: {cliente_info.get('BAIRRO', '')}")
+            st.write(f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} - {cliente_info.get('UF', '')}")
+            st.write(f"**Obs:** {cliente_info.get('OBS', '')}")
+            if cliente_info.get('OBS_2'):
+                st.write(f"**Obs 2:** {cliente_info.get('OBS_2', '')}")
+            
+            lat = cliente_info.get('LATITUDE')
+            lon = cliente_info.get('LONGITUDE')
+            if pd.notna(lat) and pd.notna(lon):
+                maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                st.markdown(f"🗺️ **Abrir localização no Google Maps:** [Clique aqui para abrir a rota]({maps_url})", unsafe_allow_html=True)
+            else:
+                st.write("🗺️ **Google Maps:** Coordenadas não disponíveis para este cliente.")
                 
             st.markdown("---")
             
