@@ -6,7 +6,11 @@ import pytz
 import pandas as pd
 import tempfile
 import speech_recognition as sr
-import pydeck as pdk
+pydeck_imported = True
+try:
+    import pydeck as pdk
+except ImportError:
+    pydeck_imported = False
 
 # Page config
 st.set_page_config(
@@ -128,8 +132,8 @@ if menu == "Relação de Clientes & Endereços":
         colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'OBS', 'OBS_2', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
         st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
         
-        # Mapa Profissional Interativo com PyDeck
-        if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns:
+        # Mapa Profissional Interativo com PyDeck se disponível
+        if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns and pydeck_imported:
             df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE']).copy()
             if not df_mapa.empty:
                 st.markdown("### 🗺️ Mapa Interativo dos Clientes da Rota")
@@ -214,7 +218,8 @@ elif menu == "Nova Visita / Check-in":
             data_visita_input = st.text_input("Digite a data (DD/MM/AAAA)", value=data_atual_sp.strftime("%d/%m/%Y"))
             
             st.markdown("### 📸 Fotos do Ponto de Venda")
-            fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+            st.info("💡 As fotos tiradas pelo celular são processadas automaticamente (correção de rotação e redimensionamento para garantir o envio perfeito).")
+            fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png", "heic", "webp"], accept_multiple_files=True)
             
             st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
             st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
@@ -255,7 +260,8 @@ elif menu == "Nova Visita / Check-in":
             relato_texto = st.text_area(
                 "Relato do Atendimento (Transcrito ou Digitado)",
                 value=st.session_state['texto_transcrito_voz'],
-                placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê..."
+                placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê...",
+                height=200
             )
             
             if st.button("💾 Enviar e Salvar Visita", type="primary"):
@@ -265,11 +271,23 @@ elif menu == "Nova Visita / Check-in":
                     fotos_salvas = []
                     os.makedirs("fotos_visitas", exist_ok=True)
                     if fotos_upload:
+                        from PIL import Image as PILImage, ImageOps
                         for idx, f in enumerate(fotos_upload):
-                            f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
-                            with open(f_path, "wb") as f_out:
-                                f_out.write(f.getbuffer())
-                            fotos_salvas.append(f_path)
+                            try:
+                                img = PILImage.open(f)
+                                img = ImageOps.exif_transpose(img)
+                                if img.mode in ("RGBA", "P"):
+                                    img = img.convert("RGB")
+                                img.thumbnail((1200, 1200))
+                                
+                                f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
+                                img.save(f_path, "JPEG", quality=85)
+                                fotos_salvas.append(f_path)
+                            except Exception:
+                                f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
+                                with open(f_path, "wb") as f_out:
+                                    f_out.write(f.getbuffer())
+                                fotos_salvas.append(f_path)
                     
                     hora_envio = datetime.now(FUSO_SP).strftime('%H:%M')
                     
