@@ -4,3 +4,4 @@ reportlab>=4.0.0
 openpyxl>=3.1.0
 SpeechRecognition>=3.10.0
 pytz>=2023.3
+pydeck>=0.8.0
