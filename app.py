@@ -44,8 +44,38 @@ def carregar_clientes():
         try:
             df_excel = pd.read_excel(EXCEL_FILE, engine='openpyxl')
             df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
-            # Filter only specific route clients
             df_filtrado = df_excel[df_excel['CODIGO'].isin(CLIENTE_CODES_ROTA)].copy()
+            
+            # Map specific observations requested by user for these clients
+            obs_dict = {
+                "23485": ("Não compra Royal", ""),
+                "28572": ("Não compra Royal", ""),
+                "21115": ("Não compra Royal", ""),
+                "21816": ("Não compra Royal, mas tem bastante Mars", ""),
+                "21609": ("Não compra Royal", "Não passa na frente"),
+                "21161": ("Não compra Royal", ""),
+                "21648": ("Não compra Royal", ""),
+                "23128": ("Não compra Royal, mas tem bastante Mars", ""),
+                "24334": ("Não compra Royal", ""),
+                "23804": ("Não compra Royal", ""),
+                "21918": ("Não compra Royal", ""),
+                "23754": ("Não compra Royal", ""),
+                "26377": ("", ""),
+                "21933": ("Só recebeu bonificação, nunca comprou", ""),
+                "21121": ("Não compra Royal", ""),
+                "21927": ("Não compra Royal", ""),
+                "21522": ("Não compra Royal, mas tem bastante Mars", ""),
+                "21917": ("Não compra Royal, mas tem bastante Mars", ""),
+                "24724": ("Não compra Royal", ""),
+                "24270": ("Compra Royal", ""),
+                "27010": ("Compra Royal", "Clínica veterinária"),
+                "21921": ("Compra Royal", ""),
+                "21874": ("Compra Royal", "")
+            }
+            
+            df_filtrado['OBS'] = df_filtrado['CODIGO'].map(lambda x: obs_dict.get(x, ("", ""))[0])
+            df_filtrado['OBS_2'] = df_filtrado['CODIGO'].map(lambda x: obs_dict.get(x, ("", ""))[1])
+            
             return df_filtrado
         except Exception as e:
             st.error(f"Erro ao ler a planilha: {e}")
@@ -55,7 +85,7 @@ def carregar_clientes():
 df_clientes = carregar_clientes()
 
 st.title("🛒 App de Roteiro e Visitas - Promotora")
-st.markdown("Consulte a relação dos clientes da rota, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
+st.markdown("Consulte a relação dos clientes da rota, filtre por cidade, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
 
 st.sidebar.header("Navegação")
 menu = st.sidebar.selectbox("Escolha a opção", ["Relação de Clientes & Endereços", "Nova Visita / Check-in", "Histórico de Visitas & PDF"])
@@ -66,22 +96,28 @@ if menu == "Relação de Clientes & Endereços":
     if df_clientes.empty:
         st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado ou nenhum cliente da rota foi encontrado na planilha.")
     else:
-        busca = st.text_input("🔍 Pesquisar por Nome, Código, Bairro ou Cidade", "")
+        # Filtro por Cidade
+        cidades_disponiveis = ["Todas"] + sorted(df_clientes['CIDADE'].dropna().unique().tolist())
+        cidade_escolhida = st.selectbox("🏙️ Filtrar por Cidade", cidades_disponiveis)
         
         df_exibicao = df_clientes.copy()
+        if cidade_escolhida != "Todas":
+            df_exibicao = df_exibicao[df_exibicao['CIDADE'] == cidade_escolhida]
+            
+        busca = st.text_input("🔍 Pesquisar por Nome, Código ou Bairro", "")
         if busca:
             mask = df_exibicao.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
             df_exibicao = df_exibicao[df_exibicao.index.isin(df_exibicao[mask].index)]
             
-        st.info(f"Mostrando {len(df_exibicao)} cliente(s) da rota.")
+        st.info(f"Mostrando {len(df_exibicao)} cliente(s).")
         
-        colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
+        colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'OBS', 'OBS_2', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
         st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
         
         if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns:
             df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE'])
             if not df_mapa.empty:
-                st.markdown("### 🗺️ Mapa dos Clientes da Rota")
+                st.markdown("### 🗺️ Mapa dos Clientes")
                 st.map(df_mapa, latitude='LATITUDE', longitude='LONGITUDE', zoom=11)
 
 elif menu == "Nova Visita / Check-in":
@@ -90,73 +126,101 @@ elif menu == "Nova Visita / Check-in":
     if df_clientes.empty:
         st.warning("Nenhum cliente carregado da planilha do GitHub.")
     else:
-        df_clientes['OPCAO_STR'] = df_clientes['CODIGO'] + " - " + df_clientes['NOME'].fillna('') + " (" + df_clientes['CIDADE'].fillna('') + ")"
-        cliente_opcoes = df_clientes['OPCAO_STR'].tolist()
+        # Filtro por Cidade no Check-in
+        cidades_disponiveis = ["Todas"] + sorted(df_clientes['CIDADE'].dropna().unique().tolist())
+        cidade_checkin = st.selectbox("🏙️ Filtrar Cidade para Atendimento", cidades_disponiveis, key="cidade_chk")
         
-        cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
-        
-        cliente_info = df_clientes[df_clientes['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
-        
-        with st.expander("📍 Ver Endereço Completo e Coordenadas"):
-            st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
-            st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
-            st.write(f"**Endereço:** {cliente_info.get('ENDEREÇO', '')}")
-            st.write(f"**Bairro:** {cliente_info.get('BAIRRO', '')}")
-            st.write(f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} - {cliente_info.get('UF', '')}")
-            st.write(f"**Latitude / Longitude:** {cliente_info.get('LATITUDE', '')}, {cliente_info.get('LONGITUDE', '')}")
+        df_chk = df_clientes.copy()
+        if cidade_checkin != "Todas":
+            df_chk = df_chk[df_chk['CIDADE'] == cidade_checkin]
             
-        st.markdown("---")
-        
-        promotora_nome = st.text_input("Nome da Promotora", value="Promotora Campo")
-        data_visita = st.date_input("Data da Visita", value=datetime.now())
-        
-        st.markdown("### 📸 Fotos do Ponto de Venda")
-        fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-        
-        st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-        st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
-        relato_texto = st.text_area("Relato do Atendimento (Transcrito ou Digitado)", placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê...")
-        
-        if st.button("💾 Enviar e Salvar Visita", type="primary"):
-            if not relato_texto and not fotos_upload:
-                st.warning("Por favor, adicione pelo menos um relato ou uma foto antes de salvar.")
-            else:
-                fotos_salvas = []
-                os.makedirs("fotos_visitas", exist_ok=True)
-                if fotos_upload:
-                    for idx, f in enumerate(fotos_upload):
-                        f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
-                        with open(f_path, "wb") as f_out:
-                            f_out.write(f.getbuffer())
-                        fotos_salvas.append(f_path)
+        if df_chk.empty:
+            st.warning("Nenhum cliente encontrado para esta cidade.")
+        else:
+            df_chk['OPCAO_STR'] = df_chk['CODIGO'] + " - " + df_chk['NOME'].fillna('') + " (" + df_chk['CIDADE'].fillna('') + ")"
+            cliente_opcoes = df_chk['OPCAO_STR'].tolist()
+            
+            cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
+            cliente_info = df_chk[df_chk['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
+            
+            with st.expander("📍 Ver Endereço, Observações e Coordenadas"):
+                st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
+                st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
+                st.write(f"**Endereço:** {cliente_info.get('ENDEREÇO', '')} - Bairro: {cliente_info.get('BAIRRO', '')}")
+                st.write(f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} - {cliente_info.get('UF', '')}")
+                st.write(f"**Obs:** {cliente_info.get('OBS', '')}")
+                if cliente_info.get('OBS_2'):
+                    st.write(f"**Obs 2:** {cliente_info.get('OBS_2', '')}")
+                st.write(f"**Latitude / Longitude:** {cliente_info.get('LATITUDE', '')}, {cliente_info.get('LONGITUDE', '')}")
                 
-                nova_visita = {
-                    "id": datetime.now().strftime('%Y%m%d%H%M%S'),
-                    "data": str(data_visita),
-                    "promotora": promotora_nome,
-                    "codigo": str(cliente_info.get('CODIGO', '')),
-                    "cliente": str(cliente_info.get('NOME', '')),
-                    "cidade": str(cliente_info.get('CIDADE', '')),
-                    "endereco": str(cliente_info.get('ENDEREÇO', '')),
-                    "bairro": str(cliente_info.get('BAIRRO', '')),
-                    "relato": relato_texto,
-                    "fotos": fotos_salvas
-                }
-                
-                dados_existentes = carregar_dados()
-                dados_existentes.append(nova_visita)
-                salvar_dados(dados_existentes)
-                
-                st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
+            st.markdown("---")
+            
+            promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
+            data_visita = st.date_input("Data da Visita", value=datetime.now())
+            
+            st.markdown("### 📸 Fotos do Ponto de Venda")
+            fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+            
+            st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
+            st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
+            relato_texto = st.text_area("Relato do Atendimento (Transcrito ou Digitado)", placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê...")
+            
+            if st.button("💾 Enviar e Salvar Visita", type="primary"):
+                if not relato_texto and not fotos_upload:
+                    st.warning("Por favor, adicione pelo menos um relato ou uma foto antes de salvar.")
+                else:
+                    fotos_salvas = []
+                    os.makedirs("fotos_visitas", exist_ok=True)
+                    if fotos_upload:
+                        for idx, f in enumerate(fotos_upload):
+                            f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
+                            with open(f_path, "wb") as f_out:
+                                f_out.write(f.getbuffer())
+                            fotos_salvas.append(f_path)
+                    
+                    nova_visita = {
+                        "id": datetime.now().strftime('%Y%m%d%H%M%S'),
+                        "data": str(data_visita),
+                        "promotora": promotora_nome,
+                        "codigo": str(cliente_info.get('CODIGO', '')),
+                        "cliente": str(cliente_info.get('NOME', '')),
+                        "cidade": str(cliente_info.get('CIDADE', '')),
+                        "endereco": str(cliente_info.get('ENDEREÇO', '')),
+                        "bairro": str(cliente_info.get('BAIRRO', '')),
+                        "obs": str(cliente_info.get('OBS', '')),
+                        "obs_2": str(cliente_info.get('OBS_2', '')),
+                        "relato": relato_texto,
+                        "fotos": fotos_salvas
+                    }
+                    
+                    dados_existentes = carregar_dados()
+                    dados_existentes.append(nova_visita)
+                    salvar_dados(dados_existentes)
+                    
+                    st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
 
 elif menu == "Histórico de Visitas & PDF":
-    st.subheader("📊 Histórico de Visitas Realizadas e Relatório PDF")
+    st.subheader("📊 Histórico de Visitas Realizadas e Exclusão / PDF")
     
     dados = carregar_dados()
     
     if not dados:
         st.info("Nenhuma visita registrada até o momento.")
     else:
+        st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
+        visita_opcoes = {f"[{v['data']}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v['id'] for v in dados}
+        visita_para_apagar = st.selectbox("Selecione uma visita para remover, se necessário", ["Nenhuma"] + list(visita_opcoes.keys()))
+        
+        if visita_para_apagar != "Nenhuma":
+            if st.button("🗑️ Apagar Visita Selecionada", type="secondary"):
+                id_alvo = visita_opcoes[visita_para_apagar]
+                dados_atualizados = [v for v in dados if v['id'] != id_alvo]
+                salvar_dados(dados_atualizados)
+                st.success("Visita apagada com sucesso! Atualize a página se necessário.")
+                st.rerun()
+                
+        st.markdown("---")
+        st.markdown("### 📋 Visitas Registradas")
         df_visitas = pd.DataFrame(dados)
         st.dataframe(df_visitas[["data", "promotora", "codigo", "cliente", "cidade", "relato"]], use_container_width=True)
         
@@ -184,6 +248,10 @@ elif menu == "Histórico de Visitas & PDF":
             for v in dados:
                 story.append(Paragraph(f"<b>Cliente:</b> {v['codigo']} - {v['cliente']} ({v['cidade']})", styles['Heading3']))
                 story.append(Paragraph(f"<b>Endereço:</b> {v.get('endereco', '')} - Bairro: {v.get('bairro', '')}", styles['Normal']))
+                if v.get('obs'):
+                    story.append(Paragraph(f"<b>Obs:</b> {v.get('obs', '')}", styles['Normal']))
+                if v.get('obs_2'):
+                    story.append(Paragraph(f"<b>Obs 2:</b> {v.get('obs_2', '')}", styles['Normal']))
                 story.append(Paragraph(f"<b>Data:</b> {v['data']} | <b>Promotora:</b> {v['promotora']}", styles['Normal']))
                 story.append(Paragraph(f"<b>Relato / Ações:</b> {v['relato']}", styles['Normal']))
                 story.append(Spacer(1, 5))
