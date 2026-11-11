@@ -45,8 +45,15 @@ def carregar_clientes():
     if os.path.exists(EXCEL_FILE):
         try:
             df_excel = pd.read_excel(EXCEL_FILE, engine='openpyxl')
-            df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\\.0$', '', regex=True)
             df_filtrado = df_excel[df_excel['CODIGO'].isin(CLIENTE_CODES_ROTA)].copy()
+            
+            # Converter latitude e longitude para formato numérico correto (substituindo vírgula por ponto se necessário)
+            for col in ['LATITUDE', 'LONGITUDE']:
+                if col in df_filtrado.columns:
+                    if df_filtrado[col].dtype == object:
+                        df_filtrado[col] = df_filtrado[col].astype(str).str.replace(',', '.', regex=False)
+                    df_filtrado[col] = pd.to_numeric(df_filtrado[col], errors='coerce')
             
             obs_dict = {
                 "23485": ("Não compra Royal", ""),
