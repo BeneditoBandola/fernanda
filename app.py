@@ -12,6 +12,7 @@ st.set_page_config(
 )
 
 DATA_FILE = "visitas_dados.json"
+EXCEL_FILE = "clientes com coordenadas.xlsx"
 
 # Load saved visits
 def carregar_dados():
@@ -28,100 +29,114 @@ def salvar_dados(dados):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Clients list (pre-loaded without days division)
-CLIENTES_INICIAIS = [
-    {"codigo": "23485", "nome": "AGROFARMA LTDA", "endereco": "Av. 21 de Dezembro, 875 - Loja 02, Centro", "cidade": "Goiana", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "20/09/2023", "obs": "Não compra Royal"},
-    {"codigo": "28572", "nome": "MUNDO ANIMAL GOIANA LTDA", "endereco": "Av. 21 de Dezembro, 1225, São Sebastião", "cidade": "Goiana", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Clínica Veterinária com Pet Shop", "ultima_compra": "10/08/2026", "obs": "Não compra Royal"},
-    {"codigo": "21115", "nome": "R E R MOURA AGROPECUARIA LTDA", "endereco": "Av. 21 de Dezembro, 1235, São Sebastião", "cidade": "Goiana", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "14/05/2026", "obs": "Não compra Royal"},
-    {"codigo": "21816", "nome": "TREVO MERCANTIL AGROPECUARIA LTDA", "endereco": "Av. 21 de Dezembro, 1075 - Loja 01, São Sebastião", "cidade": "Goiana", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "10/11/2026", "obs": "Não compra Royal, mas tem bastante Mars"},
-    {"codigo": "21609", "nome": "CAYO H G PINTO LTDA", "endereco": "R. São Vicente de Paulo, 120, Centro", "cidade": "Coronel Pacheco", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "30/05/2025", "obs": "Não compra Royal | Obs 2: Não passa na frente"},
-    {"codigo": "21161", "nome": "NUTRI-FAUNA LTDA", "endereco": "Rodovia MG 353, 61 - Loja, Centro", "cidade": "Coronel Pacheco", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "30/08/2024", "obs": "Não compra Royal"},
-    {"codigo": "21648", "nome": "CASA DO BOIADEIRO LTDA", "endereco": "Av. Presidente Juscelino Kubitschek, 10334 - Galpão 01, Barreira do Triunfo", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "20/02/2026", "obs": "Não compra Royal"},
-    {"codigo": "23128", "nome": "AGRO & PET DOS CAIPIRAS LTDA", "endereco": "Av. Presidente Juscelino Kubitschek, 10292 - Casa 01, Barreira do Triunfo", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "28/09/2026", "obs": "Não compra Royal, mas tem bastante Mars"},
-    {"codigo": "24334", "nome": "KALINA DA SILVA CUNHA", "endereco": "Avenida Juiz de Fora, 4500, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Médico Veterinário", "ultima_compra": "29/01/2026", "obs": "Não compra Royal"},
-    {"codigo": "23804", "nome": "MD AGROPECUARIA LTDA", "endereco": "Av. Juiz de Fora, 2064 - Loja Maior, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "x", "obs": ""},
-    {"codigo": "21918", "nome": "ROGNEI EGIDIO GOMES", "endereco": "Avenida Juiz de Fora, 1148 - Loja 1, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "06/11/2024", "obs": "Não compra Royal"},
-    {"codigo": "23754", "nome": "WALTER D FREGUGLIA", "endereco": "Av. Juiz de Fora, 3659, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "11/06/2026", "obs": "Não compra Royal"},
-    {"codigo": "26377", "nome": "BRUNO JOSE DA SILVA", "endereco": "Avenida Juiz de Fora, 4500 - Lote Granjas Guarujá, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "x", "obs": ""},
-    {"codigo": "21933", "nome": "AGROPECUARIA GRAMA DOIS IRMAOS LTDA", "endereco": "Avenida Juiz de Fora, 1028 - Loja 01, Parque Guarani", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "x", "obs": "Só recebeu bonificação, nunca comprou"},
-    {"codigo": "21121", "nome": "AGROPECUARIA SAO JORGE LTDA", "endereco": "Av. Juiz de Fora, 3809 - 3813, Grama", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "26/10/2026", "obs": "Não compra Royal"},
-    {"codigo": "21927", "nome": "TERRA BOA AGROPECUARIA LTDA", "endereco": "Avenida Juiz de Fora, 10, Parque Guarani", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "15/01/2024", "obs": "Não compra Royal"},
-    {"codigo": "21522", "nome": "DHIEGO MARTINS DE MEDEIROS", "endereco": "Rua Americo Lobo, 2471 - Loja, Bairu", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "01/10/2026", "obs": "Não compra Royal, mas tem bastante Mars"},
-    {"codigo": "21917", "nome": "GOMES MONTEIRO AGROPECUARIA LTDA", "endereco": "Rua Americo Lobo, 2452 - Loja, Bairu", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "29/10/2026", "obs": "Não compra Royal, mas tem bastante Mars"},
-    {"codigo": "24724", "nome": "THAINA DA SILVA NASCIMENTO", "endereco": "Rua Americo Lobo, 2313, Progresso", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "31/10/2024", "obs": "Não compra Royal"},
-    {"codigo": "24270", "nome": "SUPERMERCADO DO CAO LTDA", "endereco": "Rua Americo Lobo, 1376, Bairu/Progresso", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "21/10/2026", "obs": "Compra Royal"},
-    {"codigo": "27010", "nome": "DANIELA FERREIRA MAGDALENO", "endereco": "Rua Americo Lobo, 1177, Santa Terezinha", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Clínicas Veterinárias", "ultima_compra": "01/10/2026", "obs": "Compra Royal | Clínica veterinária"},
-    {"codigo": "21921", "nome": "CINTHIA COELHO PET SHOP PRODUTOS PARA ANIMAIS LTDA", "endereco": "Av. Barão do Rio Branco, 490, Manoel Honório", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Pet Shop c/ Granel", "ultima_compra": "09/11/2026", "obs": "Compra Royal"},
-    {"codigo": "21874", "nome": "BARBARA FELIPPE COMERCIAL LTDA", "endereco": "Av. Barão do Rio Branco, 1960, Centro", "cidade": "Juiz de Fora", "uf": "MG", "classificacao": "Especialista Pet", "ramo": "Agropecuária", "ultima_compra": "10/11/2026", "obs": "Compra Royal"}
-]
+# Load clients from Excel file on GitHub
+@st.cache_data
+def carregar_clientes():
+    if os.path.exists(EXCEL_FILE):
+        try:
+            df_excel = pd.read_excel(EXCEL_FILE)
+            # Clean columns
+            df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
+            return df_excel
+        except Exception as e:
+            st.error(f"Erro ao ler a planilha: {e}")
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+df_clientes = carregar_clientes()
 
 st.title("🛒 App de Roteiro e Visitas - Promotora")
-st.markdown("Registre as visitas em campo, adicione fotos, relate o que foi feito por áudio/texto e gere o relatório PDF para a diretoria.")
+st.markdown("Consulte a relação de clientes e endereços da planilha do GitHub, registre atendimentos em campo com fotos e relatos, e gere relatórios em PDF para a diretoria.")
 
 st.sidebar.header("Navegação")
-menu = st.sidebar.selectbox("Escolha a opção", ["Nova Visita / Check-in", "Histórico de Visitas & PDF"])
+menu = st.sidebar.selectbox("Escolha a opção", ["Relação de Clientes & Endereços", "Nova Visita / Check-in", "Histórico de Visitas & PDF"])
 
-if menu == "Nova Visita / Check-in":
+if menu == "Relação de Clientes & Endereços":
+    st.subheader("📋 Relação de Clientes e Endereços (Planilha do GitHub)")
+    
+    if df_clientes.empty:
+        st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado no repositório.")
+    else:
+        # Search filter
+        busca = st.text_input("🔍 Pesquisar por Nome, Código, Bairro ou Cidade", "")
+        
+        df_exibicao = df_clientes.copy()
+        if busca:
+            mask = df_exibicao.astype(str).apply(lambda x: x.str.contains(busca, case=False, na=False)).any(axis=1)
+            df_exibicao = df_exibicao[df_exibicao.index.isin(df_exibicao[mask].index)]
+            
+        st.info(f"Mostrando {len(df_exibicao)} cliente(s) cadastrados na planilha.")
+        
+        # Show table with main columns
+        colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
+        st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
+
+elif menu == "Nova Visita / Check-in":
     st.subheader("📝 Registrar Atendimento em PDV")
     
-    # Seleção de Cliente
-    cliente_opcoes = {f"{c['codigo']} - {c['nome']} ({c['cidade']})": c for c in CLIENTES_INICIAIS}
-    cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", list(cliente_opcoes.keys()))
-    cliente_info = cliente_opcoes[cliente_selecionado_str]
-    
-    with st.expander("Ver Detalhes do Cliente Cadastrado"):
-        st.write(f"**Código:** {cliente_info['codigo']}")
-        st.write(f"**Endereço:** {cliente_info['endereco']}")
-        st.write(f"**Cidade/UF:** {cliente_info['cidade']} - {cliente_info['uf']}")
-        st.write(f"**Ramo:** {cliente_info['ramo']} | **Classificação:** {cliente_info['classificacao']}")
-        st.write(f"**Última Compra:** {cliente_info['ultima_compra']}")
-        st.write(f"**Observações:** {cliente_info['obs']}")
+    if df_clientes.empty:
+        st.warning("Nenhum cliente carregado da planilha do GitHub.")
+    else:
+        # Prepare client options
+        df_clientes['OPCAO_STR'] = df_clientes['CODIGO'] + " - " + df_clientes['NOME'].fillna('') + " (" + df_clientes['CIDADE'].fillna('') + ")"
+        cliente_opcoes = df_clientes['OPCAO_STR'].tolist()
         
-    st.markdown("---")
-    
-    # Captura de dados da visita
-    promotora_nome = st.text_input("Nome da Promotora", value="Promotora Campo")
-    data_visita = st.date_input("Data da Visita", value=datetime.now())
-    
-    st.markdown("### 📸 Fotos do Ponto de Venda")
-    fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-    
-    st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-    st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
-    relato_texto = st.text_area("Relato do Atendimento (Transcrito ou Digitado)", placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê, cliente possui bastante estoque de concorrente...")
-    
-    if st.button("💾 Enviar e Salvar Visita", type="primary"):
-        if not relato_texto and not fotos_upload:
-            st.warning("Por favor, adicione pelo menos um relato ou uma foto antes de salvar.")
-        else:
-            # Salvar fotos se houver
-            fotos_salvas = []
-            os.makedirs("fotos_visitas", exist_ok=True)
-            if fotos_upload:
-                for idx, f in enumerate(fotos_upload):
-                    f_path = os.path.join("fotos_visitas", f"{cliente_info['codigo']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
-                    with open(f_path, "wb") as f_out:
-                        f_out.write(f.getbuffer())
-                    fotos_salvas.append(f_path)
+        cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
+        
+        # Get selected client row
+        cliente_info = df_clientes[df_clientes['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
+        
+        with st.expander("📍 Ver Endereço Completo e Coordenadas"):
+            st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
+            st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
+            st.write(f"**Endereço:** {cliente_info.get('ENDEREÇO', '')}")
+            st.write(f"**Bairro:** {cliente_info.get('BAIRRO', '')}")
+            st.write(f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} - {cliente_info.get('UF', '')}")
+            st.write(f"**Latitude / Longitude:** {cliente_info.get('LATITUDE', '')}, {cliente_info.get('LONGITUDE', '')}")
             
-            nova_visita = {
-                "id": datetime.now().strftime('%Y%m%d%H%M%S'),
-                "data": str(data_visita),
-                "promotora": promotora_nome,
-                "codigo": cliente_info["codigo"],
-                "cliente": cliente_info["nome"],
-                "cidade": cliente_info["cidade"],
-                "endereco": cliente_info["endereco"],
-                "ramo": cliente_info["ramo"],
-                "relato": relato_texto,
-                "fotos": fotos_salvas
-            }
-            
-            dados_existentes = carregar_dados()
-            dados_existentes.append(nova_visita)
-            salvar_dados(dados_existentes)
-            
-            st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
+        st.markdown("---")
+        
+        promotora_nome = st.text_input("Nome da Promotora", value="Promotora Campo")
+        data_visita = st.date_input("Data da Visita", value=datetime.now())
+        
+        st.markdown("### 📸 Fotos do Ponto de Venda")
+        fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+        
+        st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
+        st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
+        relato_texto = st.text_area("Relato do Atendimento (Transcrito ou Digitado)", placeholder="Ex: Gôndola organizada, colocado ponto extra de sachê...")
+        
+        if st.button("💾 Enviar e Salvar Visita", type="primary"):
+            if not relato_texto and not fotos_upload:
+                st.warning("Por favor, adicione pelo menos um relato ou uma foto antes de salvar.")
+            else:
+                fotos_salvas = []
+                os.makedirs("fotos_visitas", exist_ok=True)
+                if fotos_upload:
+                    for idx, f in enumerate(fotos_upload):
+                        f_path = os.path.join("fotos_visitas", f"{cliente_info['CODIGO']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg")
+                        with open(f_path, "wb") as f_out:
+                            f_out.write(f.getbuffer())
+                        fotos_salvas.append(f_path)
+                
+                nova_visita = {
+                    "id": datetime.now().strftime('%Y%m%d%H%M%S'),
+                    "data": str(data_visita),
+                    "promotora": promotora_nome,
+                    "codigo": str(cliente_info.get('CODIGO', '')),
+                    "cliente": str(cliente_info.get('NOME', '')),
+                    "cidade": str(cliente_info.get('CIDADE', '')),
+                    "endereco": str(cliente_info.get('ENDEREÇO', '')),
+                    "bairro": str(cliente_info.get('BAIRRO', '')),
+                    "relato": relato_texto,
+                    "fotos": fotos_salvas
+                }
+                
+                dados_existentes = carregar_dados()
+                dados_existentes.append(nova_visita)
+                salvar_dados(dados_existentes)
+                
+                st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
 
 elif menu == "Histórico de Visitas & PDF":
     st.subheader("📊 Histórico de Visitas Realizadas e Relatório PDF")
@@ -131,8 +146,8 @@ elif menu == "Histórico de Visitas & PDF":
     if not dados:
         st.info("Nenhuma visita registrada até o momento.")
     else:
-        df = pd.DataFrame(dados)
-        st.dataframe(df[["data", "promotora", "codigo", "cliente", "cidade", "relato"]])
+        df_visitas = pd.DataFrame(dados)
+        st.dataframe(df_visitas[["data", "promotora", "codigo", "cliente", "cidade", "relato"]], use_container_width=True)
         
         st.markdown("---")
         st.markdown("### 📄 Gerar Relatório Executivo em PDF para a Diretoria")
@@ -157,6 +172,7 @@ elif menu == "Histórico de Visitas & PDF":
             
             for v in dados:
                 story.append(Paragraph(f"<b>Cliente:</b> {v['codigo']} - {v['cliente']} ({v['cidade']})", styles['Heading3']))
+                story.append(Paragraph(f"<b>Endereço:</b> {v.get('endereco', '')} - Bairro: {v.get('bairro', '')}", styles['Normal']))
                 story.append(Paragraph(f"<b>Data:</b> {v['data']} | <b>Promotora:</b> {v['promotora']}", styles['Normal']))
                 story.append(Paragraph(f"<b>Relato / Ações:</b> {v['relato']}", styles['Normal']))
                 story.append(Spacer(1, 5))
