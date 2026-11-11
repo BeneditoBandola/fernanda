@@ -34,7 +34,7 @@ def salvar_dados(dados):
 def carregar_clientes():
     if os.path.exists(EXCEL_FILE):
         try:
-            df_excel = pd.read_excel(EXCEL_FILE)
+            df_excel = pd.read_excel(EXCEL_FILE, engine='openpyxl')
             # Clean columns
             df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
             return df_excel
@@ -55,7 +55,7 @@ if menu == "Relação de Clientes & Endereços":
     st.subheader("📋 Relação de Clientes e Endereços (Planilha do GitHub)")
     
     if df_clientes.empty:
-        st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado no repositório.")
+        st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado no repositório ou ocorreu um erro de leitura. Verifique se o nome do arquivo no GitHub é exatamente igual.")
     else:
         # Search filter
         busca = st.text_input("🔍 Pesquisar por Nome, Código, Bairro ou Cidade", "")
@@ -70,20 +70,25 @@ if menu == "Relação de Clientes & Endereços":
         # Show table with main columns
         colunas_exibir = [c for c in ['CODIGO', 'NOME', 'ENDEREÇO', 'BAIRRO', 'CIDADE', 'UF', 'LATITUDE', 'LONGITUDE'] if c in df_exibicao.columns]
         st.dataframe(df_exibicao[colunas_exibir], use_container_width=True)
+        
+        # Mapa interativo opcional
+        if 'LATITUDE' in df_exibicao.columns and 'LONGITUDE' in df_exibicao.columns:
+            df_mapa = df_exibicao.dropna(subset=['LATITUDE', 'LONGITUDE'])
+            if not df_mapa.empty:
+                st.markdown("### 🗺️ Mapa dos Clientes")
+                st.map(df_mapa, latitude='LATITUDE', longitude='LONGITUDE', zoom=11)
 
 elif menu == "Nova Visita / Check-in":
     st.subheader("📝 Registrar Atendimento em PDV")
     
     if df_clientes.empty:
-        st.warning("Nenhum cliente carregado da planilha do GitHub.")
+        st.warning("Nenhum cliente carregado da planilha do GitHub. Verifique o arquivo requirements.txt e o Excel.")
     else:
-        # Prepare client options
         df_clientes['OPCAO_STR'] = df_clientes['CODIGO'] + " - " + df_clientes['NOME'].fillna('') + " (" + df_clientes['CIDADE'].fillna('') + ")"
         cliente_opcoes = df_clientes['OPCAO_STR'].tolist()
         
         cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
         
-        # Get selected client row
         cliente_info = df_clientes[df_clientes['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
         
         with st.expander("📍 Ver Endereço Completo e Coordenadas"):
