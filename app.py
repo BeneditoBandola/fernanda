@@ -46,7 +46,6 @@ def carregar_clientes():
             df_excel['CODIGO'] = df_excel['CODIGO'].astype(str).str.replace(r'\.0$', '', regex=True)
             df_filtrado = df_excel[df_excel['CODIGO'].isin(CLIENTE_CODES_ROTA)].copy()
             
-            # Map specific observations requested by user for these clients
             obs_dict = {
                 "23485": ("Não compra Royal", ""),
                 "28572": ("Não compra Royal", ""),
@@ -96,7 +95,6 @@ if menu == "Relação de Clientes & Endereços":
     if df_clientes.empty:
         st.warning(f"O arquivo '{EXCEL_FILE}' não foi encontrado ou nenhum cliente da rota foi encontrado na planilha.")
     else:
-        # Filtro por Cidade
         cidades_disponiveis = ["Todas"] + sorted(df_clientes['CIDADE'].dropna().unique().tolist())
         cidade_escolhida = st.selectbox("🏙️ Filtrar por Cidade", cidades_disponiveis)
         
@@ -126,7 +124,6 @@ elif menu == "Nova Visita / Check-in":
     if df_clientes.empty:
         st.warning("Nenhum cliente carregado da planilha do GitHub.")
     else:
-        # Filtro por Cidade no Check-in
         cidades_disponiveis = ["Todas"] + sorted(df_clientes['CIDADE'].dropna().unique().tolist())
         cidade_checkin = st.selectbox("🏙️ Filtrar Cidade para Atendimento", cidades_disponiveis, key="cidade_chk")
         
@@ -143,7 +140,6 @@ elif menu == "Nova Visita / Check-in":
             cliente_selecionado_str = st.selectbox("Selecione o Cliente / Loja", cliente_opcoes)
             cliente_info = df_chk[df_chk['OPCAO_STR'] == cliente_selecionado_str].iloc[0]
             
-            # Exibir Endereço, Observações e Link do Google Maps diretamente (sem expander)
             st.markdown("---")
             st.markdown("### 📍 Informações do Cliente Selecionado")
             st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
@@ -187,9 +183,13 @@ elif menu == "Nova Visita / Check-in":
                                 f_out.write(f.getbuffer())
                             fotos_salvas.append(f_path)
                     
+                    data_formatada = data_visita.strftime('%d/%m/%Y')
+                    hora_envio = datetime.now().strftime('%H:%M')
+                    
                     nova_visita = {
                         "id": datetime.now().strftime('%Y%m%d%H%M%S'),
-                        "data": str(data_visita),
+                        "data": data_formatada,
+                        "hora": hora_envio,
                         "promotora": promotora_nome,
                         "codigo": str(cliente_info.get('CODIGO', '')),
                         "cliente": str(cliente_info.get('NOME', '')),
@@ -217,7 +217,7 @@ elif menu == "Histórico de Visitas & PDF":
         st.info("Nenhuma visita registrada até o momento.")
     else:
         st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
-        visita_opcoes = {f"[{v['data']}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v['id'] for v in dados}
+        visita_opcoes = {f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v['id'] for v in dados}
         visita_para_apagar = st.selectbox("Selecione uma visita para remover, se necessário", ["Nenhuma"] + list(visita_opcoes.keys()))
         
         if visita_para_apagar != "Nenhuma":
@@ -231,7 +231,9 @@ elif menu == "Histórico de Visitas & PDF":
         st.markdown("---")
         st.markdown("### 📋 Visitas Registradas")
         df_visitas = pd.DataFrame(dados)
-        st.dataframe(df_visitas[["data", "promotora", "codigo", "cliente", "cidade", "relato"]], use_container_width=True)
+        if 'hora' not in df_visitas.columns:
+            df_visitas['hora'] = '--:--'
+        st.dataframe(df_visitas[["data", "hora", "promotora", "codigo", "cliente", "cidade", "relato"]], use_container_width=True)
         
         st.markdown("---")
         st.markdown("### 📄 Gerar Relatório Executivo em PDF para a Diretoria")
@@ -261,7 +263,8 @@ elif menu == "Histórico de Visitas & PDF":
                     story.append(Paragraph(f"<b>Obs:</b> {v.get('obs', '')}", styles['Normal']))
                 if v.get('obs_2'):
                     story.append(Paragraph(f"<b>Obs 2:</b> {v.get('obs_2', '')}", styles['Normal']))
-                story.append(Paragraph(f"<b>Data:</b> {v['data']} | <b>Promotora:</b> {v['promotora']}", styles['Normal']))
+                hora_str = f" às {v['hora']}" if v.get('hora') else ""
+                story.append(Paragraph(f"<b>Data:</b> {v['data']}{hora_str} | <b>Promotora:</b> {v['promotora']}", styles['Normal']))
                 story.append(Paragraph(f"<b>Relato / Ações:</b> {v['relato']}", styles['Normal']))
                 story.append(Spacer(1, 5))
                 
