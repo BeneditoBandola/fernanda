@@ -222,23 +222,26 @@ elif menu == "Nova Visita / Check-in":
             fotos_upload = st.file_uploader("Tirar ou carregar fotos da gôndola/exposição", type=["jpg", "jpeg", "png", "heic", "webp"], accept_multiple_files=True)
             
             st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-            st.info("💡 A promotora pode ditar o áudio ou escrever o relato do que tem de produtos e o que foi arrumado.")
+            st.info("💡 A promotora pode ditar o áudio ou escrever o relato. O áudio original ficará salvo para escuta no app!")
             
             if 'texto_transcrito_voz' not in st.session_state:
                 st.session_state['texto_transcrito_voz'] = ""
             if 'audio_key_id' not in st.session_state:
                 st.session_state['audio_key_id'] = 0
+            if 'ultimo_audio_bytes' not in st.session_state:
+                st.session_state['ultimo_audio_bytes'] = None
 
             audio_gravado = st.audio_input("🎙️ Grave o áudio falando as observações da loja:", key=f"audio_input_{st.session_state['audio_key_id']}")
             
             if audio_gravado is not None:
+                st.session_state['ultimo_audio_bytes'] = audio_gravado.getvalue()
                 col_transc, col_apagar = st.columns([3, 1])
                 with col_transc:
                     if st.button("✨ Transcrever Áudio em Texto"):
                         with st.spinner("Interpretando e transcrevendo áudio..."):
                             try:
                                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as f_audio:
-                                    f_audio.write(audio_gravado.read())
+                                    f_audio.write(st.session_state['ultimo_audio_bytes'])
                                     caminho_audio_temp = f_audio.name
 
                                 r = sr.Recognizer()
@@ -254,6 +257,7 @@ elif menu == "Nova Visita / Check-in":
                 with col_apagar:
                     if st.button("🗑️ Apagar Tudo"):
                         st.session_state['texto_transcrito_voz'] = ""
+                        st.session_state['ultimo_audio_bytes'] = None
                         st.session_state['audio_key_id'] += 1
                         st.rerun()
 
@@ -265,8 +269,8 @@ elif menu == "Nova Visita / Check-in":
             )
             
             if st.button("💾 Enviar e Salvar Visita", type="primary"):
-                if not relato_texto and not fotos_upload:
-                    st.warning("Por favor, adicione pelo menos um relato ou uma foto antes de salvar.")
+                if not relato_texto and not fotos_upload and not st.session_state['ultimo_audio_bytes']:
+                    st.warning("Por favor, adicione pelo menos um relato, uma foto ou um áudio antes de salvar.")
                 else:
                     fotos_salvas = []
                     os.makedirs("fotos_visitas", exist_ok=True)
@@ -289,6 +293,14 @@ elif menu == "Nova Visita / Check-in":
                                     f_out.write(f.getbuffer())
                                 fotos_salvas.append(f_path)
                     
+                    # Salvar arquivo de áudio se houver gravação
+                    audio_salvo_path = None
+                    if st.session_state['ultimo_audio_bytes']:
+                        os.makedirs("audios_visitas", exist_ok=True)
+                        audio_salvo_path = os.path.join("audios_visitas", f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}.wav")
+                        with open(audio_salvo_path, "wb") as f_audio_out:
+                            f_audio_out.write(st.session_state['ultimo_audio_bytes'])
+                    
                     hora_envio = datetime.now(FUSO_SP).strftime('%H:%M')
                     
                     nova_visita = {
@@ -304,14 +316,18 @@ elif menu == "Nova Visita / Check-in":
                         "obs": str(cliente_info.get('OBS', '')),
                         "obs_2": str(cliente_info.get('OBS_2', '')),
                         "relato": relato_texto,
-                        "fotos": fotos_salvas
+                        "fotos": fotos_salvas,
+                        "audio_path": audio_salvo_path
                     }
                     
                     dados_existentes = carregar_dados()
                     dados_existentes.append(nova_visita)
                     salvar_dados(dados_existentes)
                     
-                    st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
+                    # Limpar estado de áudio após salvar
+                    st.session_state['ultimo_audio_bytes'] = None
+                    st.session_state['texto_transcrito_voz'] = ""
+                    st.success("Visita registrada com sucesso, áudio e dados salvos com segurança! 🚀")
 
 elif menu == "Histórico de Visitas & PDF":
     st.subheader("📊 Histórico de Visitas Realizadas, Edição e Exclusão / PDF")
@@ -340,6 +356,19 @@ elif menu == "Histórico de Visitas & PDF":
 
         st.markdown("---")
 
+        # Exibir reprodução de áudio gravado no histórico (APENAS NO APP)
+        st.markdown("### 🎙️ Ouvir Áudios Gravados nas Visitas")
+        visitas_com_audio = [v for v in dados if v.get("audio_path") and os.path.exists(v["audio_path"])]
+        if visitas_com_audio:
+            v_audio_sel = st.selectbox("Selecione a visita para ouvir o áudio original", ["Nenhuma"] + [f"[{v['data']}] {v['codigo']} - {v['cliente']}" for v in visitas_com_audio])
+            if v_audio_sel != "Nenhuma":
+                v_escolhida = next(v for v in visitas_com_audio if f"[{v['data']}] {v['codigo']} - {v['cliente']}" == v_audio_sel)
+                st.audio(v_escolhida["audio_path"])
+        else:
+            st.info("Nenhum áudio original gravado nas visitas atuais.")
+
+        st.markdown("---")
+
         # Seção para APAGAR UMA VISITA
         st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
         visita_opcoes = {f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v['id'] for v in dados}
@@ -362,6 +391,26 @@ elif menu == "Histórico de Visitas & PDF":
         
         st.markdown("---")
         st.markdown("### 📄 Gerar Relatório Executivo em PDF para a Diretoria")
+        
+        # Opções de personalização do PDF
+        incluir_fotos = st.checkbox("Incluir registros fotográficos no relatório PDF", value=True)
+        
+        if incluir_fotos:
+            st.info("💡 Abaixo você pode desmarcar fotos específicas que não deseja que apareçam no PDF:")
+            fotos_selecionadas_dict = {}
+            for i, v in enumerate(dados):
+                if v.get("fotos"):
+                    with st.expander(f"📷 Fotos da visita: {v['cliente']} ({v['data']})"):
+                        fotos_selecionadas_dict[v['id']] = []
+                        for f_idx, foto_path in enumerate(v["fotos"]):
+                            if os.path.exists(foto_path):
+                                col_img, col_chk = st.columns([1, 2])
+                                with col_img:
+                                    st.image(foto_path, width=100)
+                                with col_chk:
+                                    manter = st.checkbox(f"Incluir foto {f_idx+1}", value=True, key=f"chk_foto_{v['id']}_{f_idx}")
+                                    if manter:
+                                        fotos_selecionadas_dict[v['id']].append(foto_path)
         
         if st.button("Gerar PDF Executivo", type="primary"):
             from reportlab.lib.pagesizes import letter
@@ -393,20 +442,22 @@ elif menu == "Histórico de Visitas & PDF":
                 story.append(Paragraph(f"<b>Relato / Ações:</b> {v['relato']}", styles['Normal']))
                 story.append(Spacer(1, 5))
                 
-                if v.get("fotos"):
-                    story.append(Paragraph("<b>Registros Fotográficos:</b>", styles['Normal']))
-                    img_elements = []
-                    for foto_path in v["fotos"]:
-                        if os.path.exists(foto_path):
-                            try:
-                                img = RLImage(foto_path, width=120, height=160)
-                                img_elements.append(img)
-                            except Exception:
-                                pass
-                    if img_elements:
-                        t = Table([img_elements], colWidths=[130]*len(img_elements))
-                        t.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
-                        story.append(t)
+                if incluir_fotos and v.get("fotos"):
+                    fotos_para_usar = fotos_selecionadas_dict.get(v['id'], v["fotos"])
+                    if fotos_para_usar:
+                        story.append(Paragraph("<b>Registros Fotográficos:</b>", styles['Normal']))
+                        img_elements = []
+                        for foto_path in fotos_para_usar:
+                            if os.path.exists(foto_path):
+                                try:
+                                    img = RLImage(foto_path, width=120, height=160)
+                                    img_elements.append(img)
+                                except Exception:
+                                    pass
+                        if img_elements:
+                            t = Table([img_elements], colWidths=[130]*len(img_elements))
+                            t.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
+                            story.append(t)
                 story.append(Spacer(1, 15))
                 story.append(Paragraph("-" * 80, subtitle_style))
             
