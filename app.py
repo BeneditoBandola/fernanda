@@ -314,16 +314,36 @@ elif menu == "Nova Visita / Check-in":
                     st.success("Visita registrada com sucesso e salva no JSON com segurança! 🚀")
 
 elif menu == "Histórico de Visitas & PDF":
-    st.subheader("📊 Histórico de Visitas Realizadas e Exclusão / PDF")
+    st.subheader("📊 Histórico de Visitas Realizadas, Edição e Exclusão / PDF")
     
     dados = carregar_dados()
     
     if not dados:
         st.info("Nenhuma visita registrada até o momento.")
     else:
+        # Seção para EDITAR O RELATO DE UMA VISITA
+        st.markdown("### ✏️ Editar Relato de uma Visita")
+        visita_opcoes_edicao = {f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} - {v['cliente']} (ID: {v['id']})": v for v in dados}
+        visita_sel_str = st.selectbox("Selecione uma visita para editar o texto", ["Nenhuma"] + list(visita_opcoes_edicao.keys()), key="sel_edicao")
+        
+        if visita_sel_str != "Nenhuma":
+            v_obj = visita_opcoes_edicao[visita_sel_str]
+            novo_relato = st.text_area("Editar Relato:", value=v_obj['relato'], height=150, key=f"edit_relato_{v_obj['id']}")
+            if st.button("💾 Salvar Alterações do Relato", type="primary"):
+                for item in dados:
+                    if item['id'] == v_obj['id']:
+                        item['relato'] = novo_relato
+                        break
+                salvar_dados(dados)
+                st.success("Relato atualizado com sucesso! 🚀")
+                st.rerun()
+
+        st.markdown("---")
+
+        # Seção para APAGAR UMA VISITA
         st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
         visita_opcoes = {f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v['id'] for v in dados}
-        visita_para_apagar = st.selectbox("Selecione uma visita para remover, se necessário", ["Nenhuma"] + list(visita_opcoes.keys()))
+        visita_para_apagar = st.selectbox("Selecione uma visita para remover, se necessário", ["Nenhuma"] + list(visita_opcoes.keys()), key="sel_apagar")
         
         if visita_para_apagar != "Nenhuma":
             if st.button("🗑️ Apagar Visita Selecionada", type="secondary"):
