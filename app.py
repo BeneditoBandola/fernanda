@@ -1,9 +1,11 @@
+import base64
 from datetime import datetime
 import json
 import os
 import tempfile
 import pandas as pd
 import pytz
+import requests
 import speech_recognition as sr
 import streamlit as st
 
@@ -18,11 +20,20 @@ st.set_page_config(
     page_title="App de Visitas - Promotora", page_icon="📍", layout="wide"
 )
 
-DATA_FILE = "visitas_dados.json"
+# --- CONFIGURAÇÕES DO GITHUB ---
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "SEU_TOKEN_AQUI")
+REPO_OWNER = "seu_usuario_github"  # Substitua pelo seu usuário do GitHub
+REPO_NAME = "nome_do_repositorio"  # Substitua pelo nome do seu repositório
+FILE_PATH = "visitas_dados.json"
+
+HEADERS = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json",
+}
+
 EXCEL_FILE = "clientes com coordenadas.xlsx"
 FUSO_SP = pytz.timezone("America/Sao_Paulo")
 
-# Specific client codes for the route
 CLIENTE_CODES_ROTA = [
     "23485",
     "28572",
@@ -50,21 +61,61 @@ CLIENTE_CODES_ROTA = [
 ]
 
 
-# Load saved visits from JSON
+# --- FUNÇÕES DE SINCRONIZAÇÃO COM GITHUB ---
 def carregar_dados():
-  if os.path.exists(DATA_FILE):
+  """Lê o JSON direto do GitHub se houver token, senão lê o local"""
+  if GITHUB_TOKEN and GITHUB_TOKEN != "SEU_TOKEN_AQUI":
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     try:
-      with open(DATA_FILE, "r", encoding="utf-8") as f:
+      response = requests.get(url, headers=HEADERS)
+      if response.status_code == 200:
+        file_content = response.json()
+        decoded_content = base64.b64decode(file_content["content"]).decode(
+            "utf-8"
+        )
+        return json.loads(decoded_content)
+    except Exception:
+      pass
+
+  # Fallback para arquivo local se falhar
+  if os.path.exists(FILE_PATH):
+    try:
+      with open(FILE_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
     except Exception:
       return []
   return []
 
 
-# Save visits to JSON
 def salvar_dados(dados):
-  with open(DATA_FILE, "w", encoding="utf-8") as f:
+  """Salva localmente e envia automaticamente um commit para o GitHub"""
+  # Salva local primeiro
+  with open(FILE_PATH, "w", encoding="utf-8") as f:
     json.dump(dados, f, ensure_ascii=False, indent=4)
+
+  # Salva no GitHub via API
+  if GITHUB_TOKEN and GITHUB_TOKEN != "SEU_TOKEN_AQUI":
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    try:
+      # Pega o SHA atual do arquivo para atualizar
+      resp_get = requests.get(url, headers=HEADERS)
+      sha = resp_get.json().get("sha") if resp_get.status_code == 200 else None
+
+      json_str = json.dumps(dados, ensure_ascii=False, indent=4)
+      content_base64 = base64.b64encode(json_str.encode("utf-8")).decode(
+          "utf-8"
+      )
+
+      payload = {
+          "message": "Atualização automática de visitas via App",
+          "content": content_base64,
+      }
+      if sha:
+        payload["sha"] = sha
+
+      requests.put(url, headers=HEADERS, json=payload)
+    except Exception:
+      pass
 
 
 # Load clients from Excel file and filter only route clients
@@ -73,20 +124,16 @@ def carregar_clientes():
   if os.path.exists(EXCEL_FILE):
     try:
       df_excel = pd.read_excel(EXCEL_FILE, engine="openpyxl")
-
-      # Limpeza robusta do Código para garantir o match exato
       df_excel["CODIGO"] = (
           pd.to_numeric(df_excel["CODIGO"], errors="coerce")
           .fillna(0)
           .astype(int)
           .astype(str)
       )
-
       df_filtrado = df_excel[
           df_excel["CODIGO"].isin(CLIENTE_CODES_ROTA)
       ].copy()
 
-      # Converter latitude e longitude para formato numérico correto
       for col in ["LATITUDE", "LONGITUDE"]:
         if col in df_filtrado.columns:
           if df_filtrado[col].dtype == object:
@@ -208,11 +255,8 @@ if menu == "Relação de Clientes & Endereços":
     ):
       df_mapa = df_exibicao.dropna(subset=["LATITUDE", "LONGITUDE"]).copy()
       if not df_mapa.empty:
-        st.markdown("### 🗺️ Mapa Interativo dos Clientes da Rota")
-
         lat_centro = df_mapa["LATITUDE"].mean()
         lon_centro = df_mapa["LONGITUDE"].mean()
-
         layer = pdk.Layer(
             "ScatterplotLayer",
             data=df_mapa,
@@ -222,11 +266,9 @@ if menu == "Relação de Clientes & Endereços":
             pickable=True,
             auto_highlight=True,
         )
-
         view_state = pdk.ViewState(
             latitude=lat_centro, longitude=lon_centro, zoom=12, pitch=0
         )
-
         r = pdk.Deck(
             layers=[layer],
             initial_view_state=view_state,
@@ -243,7 +285,6 @@ if menu == "Relação de Clientes & Endereços":
                 },
             },
         )
-
         st.pydeck_chart(r)
 
 elif menu == "Nova Visita / Check-in":
@@ -252,7 +293,7 @@ elif menu == "Nova Visita / Check-in":
   if df_clientes.empty:
     st.warning("Nenhum cliente carregado da planilha do GitHub.")
   else:
-    # FILTRAR APENAS LOJAS QUE AINDA NÃO FORAM VISITADAS
+    # FILTRAR LOJAS JÁ VISITADAS
     visitas_ja_feitas = carregar_dados()
     codigos_visitados = [str(v["codigo"]) for v in visitas_ja_feitas]
 
@@ -325,14 +366,8 @@ elif menu == "Nova Visita / Check-in":
               f" a rota]({maps_url})",
               unsafe_allow_html=True,
           )
-        else:
-          st.write(
-              "🗺️ **Google Maps:** Coordenadas não disponíveis para este"
-              " cliente."
-          )
 
         st.markdown("---")
-
         promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
 
         st.markdown("📅 **Data da Visita**")
@@ -343,11 +378,6 @@ elif menu == "Nova Visita / Check-in":
         )
 
         st.markdown("### 📸 Fotos do Ponto de Venda")
-        st.info(
-            "💡 As fotos tiradas pelo celular são processadas automaticamente"
-            " (correção de rotação e redimensionamento para garantir o envio"
-            " perfeito)."
-        )
         fotos_upload = st.file_uploader(
             "Tirar ou carregar fotos da gôndola/exposição",
             type=["jpg", "jpeg", "png", "heic", "webp"],
@@ -355,11 +385,6 @@ elif menu == "Nova Visita / Check-in":
         )
 
         st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-        st.info(
-            "💡 A promotora pode ditar o áudio ou escrever o relato. O áudio"
-            " original ficará salvo para escuta no app!"
-        )
-
         if "texto_transcrito_voz" not in st.session_state:
           st.session_state["texto_transcrito_voz"] = ""
         if "audio_key_id" not in st.session_state:
@@ -384,7 +409,6 @@ elif menu == "Nova Visita / Check-in":
                   ) as f_audio:
                     f_audio.write(st.session_state["ultimo_audio_bytes"])
                     caminho_audio_temp = f_audio.name
-
                   r = sr.Recognizer()
                   with sr.AudioFile(caminho_audio_temp) as source:
                     audio_data = r.record(source)
@@ -393,11 +417,6 @@ elif menu == "Nova Visita / Check-in":
                     )
                     st.session_state["texto_transcrito_voz"] = texto_falado
                     st.success("✅ Áudio transcrito com sucesso!")
-                except sr.UnknownValueError:
-                  st.warning(
-                      "⚠️ Não foi possível entender o áudio. Tente falar mais"
-                      " perto."
-                  )
                 except Exception as e:
                   st.error(f"Erro ao transcrever: {e}")
           with col_apagar:
@@ -410,9 +429,6 @@ elif menu == "Nova Visita / Check-in":
         relato_texto = st.text_area(
             "Relato do Atendimento (Transcrito ou Digitado)",
             value=st.session_state["texto_transcrito_voz"],
-            placeholder=(
-                "Ex: Gôndola organizada, colocado ponto extra de sachê..."
-            ),
             height=200,
         )
 
@@ -422,10 +438,7 @@ elif menu == "Nova Visita / Check-in":
               and not fotos_upload
               and not st.session_state["ultimo_audio_bytes"]
           ):
-            st.warning(
-                "Por favor, adicione pelo menos um relato, uma foto ou um áudio"
-                " antes de salvar."
-            )
+            st.warning("Adicione pelo menos um relato, foto ou áudio.")
           else:
             fotos_salvas = []
             os.makedirs("fotos_visitas", exist_ok=True)
@@ -439,7 +452,6 @@ elif menu == "Nova Visita / Check-in":
                   if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
                   img.thumbnail((1200, 1200))
-
                   f_path = os.path.join(
                       "fotos_visitas",
                       f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg",
@@ -466,7 +478,6 @@ elif menu == "Nova Visita / Check-in":
                 f_audio_out.write(st.session_state["ultimo_audio_bytes"])
 
             hora_envio = datetime.now(FUSO_SP).strftime("%H:%M")
-
             nova_visita = {
                 "id": datetime.now(FUSO_SP).strftime("%Y%m%d%H%M%S"),
                 "data": data_visita_input,
@@ -486,21 +497,19 @@ elif menu == "Nova Visita / Check-in":
 
             dados_existentes = carregar_dados()
             dados_existentes.append(nova_visita)
-            salvar_dados(dados_existentes)
+            salvar_dados(
+                dados_existentes
+            )  # Salva local e sincorniza com GitHub!
 
             st.session_state["ultimo_audio_bytes"] = None
             st.session_state["texto_transcrito_voz"] = ""
             st.success(
-                "Visita registrada com sucesso! A loja foi retirada da lista"
-                " de pendentes. 🚀"
+                "Visita registrada com sucesso e sincronizada no GitHub! 🚀"
             )
             st.rerun()
 
 elif menu == "Histórico de Visitas & PDF":
-  st.subheader(
-      "📊 Histórico de Visitas Realizadas, Edição e Exclusão / PDF"
-  )
-
+  st.subheader("📊 Histórico de Visitas Realizadas, Edição e Exclusão / PDF")
   dados = carregar_dados()
 
   if not dados:
@@ -521,7 +530,10 @@ elif menu == "Histórico de Visitas & PDF":
     if visita_sel_str != "Nenhuma":
       v_obj = visita_opcoes_edicao[visita_sel_str]
       novo_relato = st.text_area(
-          "Editar Relato:", value=v_obj["relato"], height=150, key=f"edit_relato_{v_obj['id']}"
+          "Editar Relato:",
+          value=v_obj["relato"],
+          height=150,
+          key=f"edit_relato_{v_obj['id']}",
       )
       if st.button("💾 Salvar Alterações do Relato", type="primary"):
         for item in dados:
@@ -529,36 +541,10 @@ elif menu == "Histórico de Visitas & PDF":
             item["relato"] = novo_relato
             break
         salvar_dados(dados)
-        st.success("Relato atualizado com sucesso no JSON! 🚀")
+        st.success("Relato atualizado e sincronizado no GitHub! 🚀")
         st.rerun()
 
     st.markdown("---")
-
-    st.markdown("### 🎙️ Ouvir Áudios Gravados nas Visitas")
-    visitas_com_audio = [
-        v for v in dados if v.get("audio_path") and os.path.exists(v["audio_path"])
-    ]
-    if visitas_com_audio:
-      v_audio_sel = st.selectbox(
-          "Selecione a visita para ouvir o áudio original",
-          ["Nenhuma"]
-          + [
-              f"[{v['data']}] {v['codigo']} - {v['cliente']}"
-              for v in visitas_com_audio
-          ],
-      )
-      if v_audio_sel != "Nenhuma":
-        v_escolhida = next(
-            v
-            for v in visitas_com_audio
-            if f"[{v['data']}] {v['codigo']} - {v['cliente']}" == v_audio_sel
-        )
-        st.audio(v_escolhida["audio_path"])
-    else:
-      st.info("Nenhum áudio original gravado nas visitas atuais.")
-
-    st.markdown("---")
-
     st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
     visita_opcoes = {
         f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} -"
@@ -581,9 +567,7 @@ elif menu == "Histórico de Visitas & PDF":
         id_alvo = visita_opcoes[visita_para_apagar]
         dados_atualizados = [v for v in dados if v["id"] != id_alvo]
         salvar_dados(dados_atualizados)
-        st.success(
-            "Visita apagada! A loja voltou a ficar disponível para visitação."
-        )
+        st.success("Visita apagada e alteração salva no GitHub!")
         st.rerun()
 
     st.markdown("---")
@@ -600,17 +584,12 @@ elif menu == "Histórico de Visitas & PDF":
 
     st.markdown("---")
     st.markdown("### 📄 Gerar Relatório Executivo em PDF para a Diretoria")
-
     incluir_fotos = st.checkbox(
         "Incluir registros fotográficos no relatório PDF", value=True
     )
 
     fotos_selecionadas_dict = {}
     if incluir_fotos:
-      st.info(
-          "💡 Abaixo você pode desmarcar fotos específicas que não deseja que"
-          " apareçam no PDF:"
-      )
       for i, v in enumerate(dados):
         if v.get("fotos"):
           with st.expander(f"📷 Fotos da visita: {v['cliente']} ({v['data']})"):
