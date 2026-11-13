@@ -20,10 +20,11 @@ st.set_page_config(
     page_title="App de Visitas - Promotora", page_icon="📍", layout="wide"
 )
 
-# --- CONFIGURAÇÕES DO GITHUB ---
-GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "SEU_TOKEN_AQUI")
-REPO_OWNER = "seu_usuario_github"  # Substitua pelo seu usuário do GitHub
-REPO_NAME = "nome_do_repositorio"  # Substitua pelo nome do seu repositório
+# --- CONFIGURAÇÃO AUTOMÁTICA DO GITHUB VIA SECRETS ---
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "")
+# O script detecta automaticamente o repositório pelas secrets ou usa valores padrão
+REPO_OWNER = st.secrets.get("REPO_OWNER", "seu_usuario_github")
+REPO_NAME = st.secrets.get("REPO_NAME", "nome_do_repositorio")
 FILE_PATH = "visitas_dados.json"
 
 HEADERS = {
@@ -63,8 +64,8 @@ CLIENTE_CODES_ROTA = [
 
 # --- FUNÇÕES DE SINCRONIZAÇÃO COM GITHUB ---
 def carregar_dados():
-  """Lê o JSON direto do GitHub se houver token, senão lê o local"""
-  if GITHUB_TOKEN and GITHUB_TOKEN != "SEU_TOKEN_AQUI":
+  """Lê o JSON direto do GitHub se houver token configurado"""
+  if GITHUB_TOKEN:
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     try:
       response = requests.get(url, headers=HEADERS)
@@ -77,7 +78,7 @@ def carregar_dados():
     except Exception:
       pass
 
-  # Fallback para arquivo local se falhar
+  # Fallback para arquivo local
   if os.path.exists(FILE_PATH):
     try:
       with open(FILE_PATH, "r", encoding="utf-8") as f:
@@ -89,15 +90,12 @@ def carregar_dados():
 
 def salvar_dados(dados):
   """Salva localmente e envia automaticamente um commit para o GitHub"""
-  # Salva local primeiro
   with open(FILE_PATH, "w", encoding="utf-8") as f:
     json.dump(dados, f, ensure_ascii=False, indent=4)
 
-  # Salva no GitHub via API
-  if GITHUB_TOKEN and GITHUB_TOKEN != "SEU_TOKEN_AQUI":
+  if GITHUB_TOKEN:
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     try:
-      # Pega o SHA atual do arquivo para atualizar
       resp_get = requests.get(url, headers=HEADERS)
       sha = resp_get.json().get("sha") if resp_get.status_code == 200 else None
 
@@ -118,7 +116,7 @@ def salvar_dados(dados):
       pass
 
 
-# Load clients from Excel file and filter only route clients
+# Load clients from Excel file
 @st.cache_data
 def carregar_clientes():
   if os.path.exists(EXCEL_FILE):
@@ -293,7 +291,6 @@ elif menu == "Nova Visita / Check-in":
   if df_clientes.empty:
     st.warning("Nenhum cliente carregado da planilha do GitHub.")
   else:
-    # FILTRAR LOJAS JÁ VISITADAS
     visitas_ja_feitas = carregar_dados()
     codigos_visitados = [str(v["codigo"]) for v in visitas_ja_feitas]
 
@@ -497,9 +494,7 @@ elif menu == "Nova Visita / Check-in":
 
             dados_existentes = carregar_dados()
             dados_existentes.append(nova_visita)
-            salvar_dados(
-                dados_existentes
-            )  # Salva local e sincorniza com GitHub!
+            salvar_dados(dados_existentes)
 
             st.session_state["ultimo_audio_bytes"] = None
             st.session_state["texto_transcrito_voz"] = ""
