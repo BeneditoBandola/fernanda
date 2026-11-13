@@ -1,4 +1,3 @@
-import base64
 from datetime import datetime
 import json
 import os
@@ -22,7 +21,6 @@ st.set_page_config(
 
 # --- CONFIGURAÇÃO AUTOMÁTICA DO GITHUB VIA SECRETS ---
 GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "")
-# O script detecta automaticamente o repositório pelas secrets ou usa valores padrão
 REPO_OWNER = st.secrets.get("REPO_OWNER", "seu_usuario_github")
 REPO_NAME = st.secrets.get("REPO_NAME", "nome_do_repositorio")
 FILE_PATH = "visitas_dados.json"
@@ -64,7 +62,6 @@ CLIENTE_CODES_ROTA = [
 
 # --- FUNÇÕES DE SINCRONIZAÇÃO COM GITHUB ---
 def carregar_dados():
-  """Lê o JSON direto do GitHub se houver token configurado"""
   if GITHUB_TOKEN:
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     try:
@@ -78,7 +75,6 @@ def carregar_dados():
     except Exception:
       pass
 
-  # Fallback para arquivo local
   if os.path.exists(FILE_PATH):
     try:
       with open(FILE_PATH, "r", encoding="utf-8") as f:
@@ -89,7 +85,6 @@ def carregar_dados():
 
 
 def salvar_dados(dados):
-  """Salva localmente e envia automaticamente um commit para o GitHub"""
   with open(FILE_PATH, "w", encoding="utf-8") as f:
     json.dump(dados, f, ensure_ascii=False, indent=4)
 
@@ -474,11 +469,9 @@ elif menu == "Nova Visita / Check-in":
               with open(audio_salvo_path, "wb") as f_audio_out:
                 f_audio_out.write(st.session_state["ultimo_audio_bytes"])
 
-            hora_envio = datetime.now(FUSO_SP).strftime("%H:%M")
             nova_visita = {
                 "id": datetime.now(FUSO_SP).strftime("%Y%m%d%H%M%S"),
                 "data": data_visita_input,
-                "hora": hora_envio,
                 "promotora": promotora_nome,
                 "codigo": str(cliente_info.get("CODIGO", "")),
                 "cliente": str(cliente_info.get("NOME", "")),
@@ -512,8 +505,7 @@ elif menu == "Histórico de Visitas & PDF":
   else:
     st.markdown("### ✏️ Editar Relato de uma Visita")
     visita_opcoes_edicao = {
-        f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} -"
-        f" {v['cliente']} (ID: {v['id']})": v
+        f"[{v['data']}] {v['codigo']} - {v['cliente']} (ID: {v['id']})": v
         for v in dados
     }
     visita_sel_str = st.selectbox(
@@ -542,8 +534,7 @@ elif menu == "Histórico de Visitas & PDF":
     st.markdown("---")
     st.markdown("### 🗑️ Gerenciar / Apagar Visitas Incorretas")
     visita_opcoes = {
-        f"[{v['data']} às {v.get('hora', '--:--')}] {v['codigo']} -"
-        f" {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v[
+        f"[{v['data']}] {v['codigo']} - {v['cliente']} (Promotora: {v['promotora']}) (ID: {v['id']})": v[
             "id"
         ]
         for v in dados
@@ -568,12 +559,8 @@ elif menu == "Histórico de Visitas & PDF":
     st.markdown("---")
     st.markdown("### 📋 Visitas Registradas")
     df_visitas = pd.DataFrame(dados)
-    if "hora" not in df_visitas.columns:
-      df_visitas["hora"] = "--:--"
     st.dataframe(
-        df_visitas[
-            ["data", "hora", "promotora", "codigo", "cliente", "cidade", "relato"]
-        ],
+        df_visitas[["data", "promotora", "codigo", "cliente", "cidade", "relato"]],
         use_container_width=True,
     )
 
@@ -609,6 +596,7 @@ elif menu == "Histórico de Visitas & PDF":
       from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
       from reportlab.platypus import (
           Image as RLImage,
+          KeepTogether,
           Paragraph,
           SimpleDocTemplate,
           Spacer,
@@ -616,7 +604,7 @@ elif menu == "Histórico de Visitas & PDF":
           TableStyle,
       )
 
-      pdf_filename = "relatorio_visitas_diretoria.pdf"
+      pdf_filename = "relatorio_visitas_executivo.pdf"
       doc = SimpleDocTemplate(
           pdf_filename,
           pagesize=letter,
@@ -642,81 +630,119 @@ elif menu == "Histórico de Visitas & PDF":
           textColor=colors.HexColor("#4A5568"),
           spaceAfter=20,
       )
+      city_header_style = ParagraphStyle(
+          "CityHeaderStyle",
+          parent=styles["Heading2"],
+          fontSize=14,
+          textColor=colors.HexColor("#2B6CB0"),
+          spaceBefore=15,
+          spaceAfter=10,
+          keepWithNext=True,
+      )
 
       story.append(
           Paragraph("Relatório de Visitas e Execução em PDV", title_style)
       )
       story.append(
           Paragraph(
-              f"Gerado em: {datetime.now(FUSO_SP).strftime('%d/%m/%Y às %H:%M')}",
+              f"Gerado em: {datetime.now(FUSO_SP).strftime('%d/%m/%Y')}",
               subtitle_style,
           )
       )
       story.append(Spacer(1, 10))
 
-      for v in dados:
-        story.append(
-            Paragraph(
-                f"<b>Cliente:</b> {v['codigo']} - {v['cliente']}"
-                f" ({v['cidade']})",
-                styles["Heading3"],
-            )
-        )
-        story.append(
-            Paragraph(
-                f"<b>Endereço:</b> {v.get('endereco', '')} - Bairro:"
-                f" {v.get('bairro', '')}",
-                styles["Normal"],
-            )
-        )
-        if v.get("obs"):
-          story.append(
-              Paragraph(f"<b>Obs:</b> {v.get('obs', '')}", styles["Normal"])
-          )
-        if v.get("obs_2"):
-          story.append(
-              Paragraph(f"<b>Obs 2:</b> {v.get('obs_2', '')}", styles["Normal"])
-          )
-        hora_str = f" às {v['hora']}" if v.get("hora") else ""
-        story.append(
-            Paragraph(
-                f"<b>Data:</b> {v['data']}{hora_str} | <b>Promotora:</b>"
-                f" {v['promotora']}",
-                styles["Normal"],
-            )
-        )
-        story.append(
-            Paragraph(f"<b>Relato / Ações:</b> {v['relato']}", styles["Normal"])
-        )
-        story.append(Spacer(1, 5))
+      # --- AGRUPAR DADOS POR CIDADE ---
+      df_relatorio = pd.DataFrame(dados)
+      if "cidade" not in df_relatorio.columns:
+        df_relatorio["cidade"] = "GERAL"
 
-        if incluir_fotos and v.get("fotos"):
-          fotos_para_usar = fotos_selecionadas_dict.get(v["id"], v["fotos"])
-          if fotos_para_usar:
-            story.append(
-                Paragraph("<b>Registros Fotográficos:</b>", styles["Normal"])
+      df_relatorio = df_relatorio.sort_values(by=["cidade", "cliente"])
+      cidades_unicas = df_relatorio["cidade"].unique()
+
+      for cidade in cidades_unicas:
+        story.append(
+            Paragraph(
+                f"🏙️ Cidade: {str(cidade).upper() if cidade else 'NÃO INFORMADA'}",
+                city_header_style,
             )
-            img_elements = []
-            for foto_path in fotos_para_usar:
-              if os.path.exists(foto_path):
-                try:
-                  img = RLImage(foto_path, width=120, height=160)
-                  img_elements.append(img)
-                except Exception:
-                  pass
-            if img_elements:
-              t = Table(
-                  [img_elements], colWidths=[130] * len(img_elements)
+        )
+
+        visitas_cidade = df_relatorio[
+            df_relatorio["cidade"] == cidade
+        ].to_dict("records")
+
+        for v in visitas_cidade:
+          cliente_story = []
+
+          cliente_story.append(
+              Paragraph(
+                  f"<b>Cliente:</b> {v['codigo']} - {v['cliente']}",
+                  styles["Heading3"],
               )
-              t.setStyle(
-                  TableStyle([
-                      ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                      ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                  ])
+          )
+          cliente_story.append(
+              Paragraph(
+                  f"<b>Endereço:</b> {v.get('endereco', '')} - Bairro:"
+                  f" {v.get('bairro', '')}",
+                  styles["Normal"],
               )
-              story.append(t)
-        story.append(Spacer(1, 15))
-        story.append(Paragraph("-" * 80, subtitle_style))
+          )
+          if v.get("obs"):
+            cliente_story.append(
+                Paragraph(f"<b>Obs:</b> {v.get('obs', '')}", styles["Normal"])
+            )
+          if v.get("obs_2"):
+            cliente_story.append(
+                Paragraph(
+                    f"<b>Obs 2:</b> {v.get('obs_2', '')}", styles["Normal"]
+                )
+            )
+
+          cliente_story.append(
+              Paragraph(
+                  f"<b>Data:</b> {v['data']} | <b>Promotora:</b>"
+                  f" {v['promotora']}",
+                  styles["Normal"],
+              )
+          )
+          cliente_story.append(
+              Paragraph(
+                  f"<b>Relato / Ações:</b> {v['relato']}", styles["Normal"]
+              )
+          )
+          cliente_story.append(Spacer(1, 5))
+
+          if incluir_fotos and v.get("fotos"):
+            fotos_para_usar = fotos_selecionadas_dict.get(v["id"], v["fotos"])
+            if fotos_para_usar:
+              cliente_story.append(
+                  Paragraph("<b>Registros Fotográficos:</b>", styles["Normal"])
+              )
+              img_elements = []
+              for foto_path in fotos_para_usar:
+                if os.path.exists(foto_path):
+                  try:
+                    img = RLImage(foto_path, width=120, height=160)
+                    img_elements.append(img)
+                  except Exception:
+                    pass
+              if img_elements:
+                t = Table(
+                    [img_elements], colWidths=[130] * len(img_elements)
+                )
+                t.setStyle(
+                    TableStyle([
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ])
+                )
+                cliente_story.append(t)
+
+          cliente_story.append(Spacer(1, 10))
+          cliente_story.append(Paragraph("-" * 80, subtitle_style))
+          cliente_story.append(Spacer(1, 10))
+
+          story.append(KeepTogether(cliente_story))
 
       doc.build(story)
 
