@@ -252,230 +252,249 @@ elif menu == "Nova Visita / Check-in":
   if df_clientes.empty:
     st.warning("Nenhum cliente carregado da planilha do GitHub.")
   else:
-    cidades_disponiveis = ["Todas"] + sorted(
-        df_clientes["CIDADE"].dropna().unique().tolist()
-    )
-    cidade_checkin = st.selectbox(
-        "🏙️ Filtrar Cidade para Atendimento", cidades_disponiveis, key="cidade_chk"
-    )
+    # FILTRAR APENAS LOJAS QUE AINDA NÃO FORAM VISITADAS
+    visitas_ja_feitas = carregar_dados()
+    codigos_visitados = [str(v["codigo"]) for v in visitas_ja_feitas]
 
-    df_chk = df_clientes.copy()
-    if cidade_checkin != "Todas":
-      df_chk = df_chk[df_chk["CIDADE"] == cidade_checkin]
+    df_pendentes = df_clientes[
+        ~df_clientes["CODIGO"].isin(codigos_visitados)
+    ].copy()
 
-    if df_chk.empty:
-      st.warning("Nenhum cliente encontrado para esta cidade.")
+    if df_pendentes.empty:
+      st.success(
+          "🎉 Parabéns! Todas as lojas da rota já foram visitadas com sucesso!"
+      )
     else:
-      df_chk["OPCAO_STR"] = (
-          df_chk["CODIGO"]
-          + " - "
-          + df_chk["NOME"].fillna("")
-          + " ("
-          + df_chk["CIDADE"].fillna("")
-          + ")"
+      cidades_disponiveis = ["Todas"] + sorted(
+          df_pendentes["CIDADE"].dropna().unique().tolist()
       )
-      cliente_opcoes = df_chk["OPCAO_STR"].tolist()
+      cidade_checkin = st.selectbox(
+          "🏙️ Filtrar Cidade para Atendimento",
+          cidades_disponiveis,
+          key="cidade_chk",
+      )
 
-      cliente_selecionado_str = st.selectbox(
-          "Selecione o Cliente / Loja", cliente_opcoes
-      )
-      cliente_info = df_chk[
-          df_chk["OPCAO_STR"] == cliente_selecionado_str
-      ].iloc[0]
+      df_chk = df_pendentes.copy()
+      if cidade_checkin != "Todas":
+        df_chk = df_chk[df_chk["CIDADE"] == cidade_checkin]
 
-      st.markdown("---")
-      st.markdown("### 📍 Informações do Cliente Selecionado")
-      st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
-      st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
-      st.write(
-          f"**Endereço:** {cliente_info.get('ENDEREÇO', '')} - Bairro:"
-          f" {cliente_info.get('BAIRRO', '')}"
-      )
-      st.write(
-          f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} -"
-          f" {cliente_info.get('UF', '')}"
-      )
-      st.write(f"**Obs:** {cliente_info.get('OBS', '')}")
-      if cliente_info.get("OBS_2"):
-        st.write(f"**Obs 2:** {cliente_info.get('OBS_2', '')}")
-
-      lat = cliente_info.get("LATITUDE")
-      lon = cliente_info.get("LONGITUDE")
-      if pd.notna(lat) and pd.notna(lon):
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
-        st.markdown(
-            f"🗺️ **Abrir localização no Google Maps:** [Clique aqui para abrir"
-            f" a rota]({maps_url})",
-            unsafe_allow_html=True,
-        )
+      if df_chk.empty:
+        st.warning("Nenhuma loja pendente encontrada para esta cidade.")
       else:
-        st.write(
-            "🗺️ **Google Maps:** Coordenadas não disponíveis para este cliente."
+        df_chk["OPCAO_STR"] = (
+            df_chk["CODIGO"]
+            + " - "
+            + df_chk["NOME"].fillna("")
+            + " ("
+            + df_chk["CIDADE"].fillna("")
+            + ")"
         )
+        cliente_opcoes = df_chk["OPCAO_STR"].tolist()
 
-      st.markdown("---")
+        cliente_selecionado_str = st.selectbox(
+            "Selecione o Cliente / Loja Pendente", cliente_opcoes
+        )
+        cliente_info = df_chk[
+            df_chk["OPCAO_STR"] == cliente_selecionado_str
+        ].iloc[0]
 
-      promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
+        st.markdown("---")
+        st.markdown("### 📍 Informações do Cliente Selecionado")
+        st.write(f"**Código:** {cliente_info.get('CODIGO', '')}")
+        st.write(f"**Nome:** {cliente_info.get('NOME', '')}")
+        st.write(
+            f"**Endereço:** {cliente_info.get('ENDEREÇO', '')} - Bairro:"
+            f" {cliente_info.get('BAIRRO', '')}"
+        )
+        st.write(
+            f"**Cidade/UF:** {cliente_info.get('CIDADE', '')} -"
+            f" {cliente_info.get('UF', '')}"
+        )
+        st.write(f"**Obs:** {cliente_info.get('OBS', '')}")
+        if cliente_info.get("OBS_2"):
+          st.write(f"**Obs 2:** {cliente_info.get('OBS_2', '')}")
 
-      st.markdown("📅 **Data da Visita**")
-      data_atual_sp = datetime.now(FUSO_SP).date()
-      data_visita_input = st.text_input(
-          "Digite a data (DD/MM/AAAA)",
-          value=data_atual_sp.strftime("%d/%m/%Y"),
-      )
-
-      st.markdown("### 📸 Fotos do Ponto de Venda")
-      st.info(
-          "💡 As fotos tiradas pelo celular são processadas automaticamente"
-          " (correção de rotação e redimensionamento para garantir o envio"
-          " perfeito)."
-      )
-      fotos_upload = st.file_uploader(
-          "Tirar ou carregar fotos da gôndola/exposição",
-          type=["jpg", "jpeg", "png", "heic", "webp"],
-          accept_multiple_files=True,
-      )
-
-      st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
-      st.info(
-          "💡 A promotora pode ditar o áudio ou escrever o relato. O áudio"
-          " original ficará salvo para escuta no app!"
-      )
-
-      if "texto_transcrito_voz" not in st.session_state:
-        st.session_state["texto_transcrito_voz"] = ""
-      if "audio_key_id" not in st.session_state:
-        st.session_state["audio_key_id"] = 0
-      if "ultimo_audio_bytes" not in st.session_state:
-        st.session_state["ultimo_audio_bytes"] = None
-
-      audio_gravado = st.audio_input(
-          "🎙️ Grave o áudio falando as observações da loja:",
-          key=f"audio_input_{st.session_state['audio_key_id']}",
-      )
-
-      if audio_gravado is not None:
-        st.session_state["ultimo_audio_bytes"] = audio_gravado.getvalue()
-        col_transc, col_apagar = st.columns([3, 1])
-        with col_transc:
-          if st.button("✨ Transcrever Áudio em Texto"):
-            with st.spinner("Interpretando e transcrevendo áudio..."):
-              try:
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=".wav"
-                ) as f_audio:
-                  f_audio.write(st.session_state["ultimo_audio_bytes"])
-                  caminho_audio_temp = f_audio.name
-
-                r = sr.Recognizer()
-                with sr.AudioFile(caminho_audio_temp) as source:
-                  audio_data = r.record(source)
-                  texto_falado = r.recognize_google(
-                      audio_data, language="pt-BR"
-                  )
-                  st.session_state["texto_transcrito_voz"] = texto_falado
-                  st.success("✅ Áudio transcrito com sucesso!")
-              except sr.UnknownValueError:
-                st.warning(
-                    "⚠️ Não foi possível entender o áudio. Tente falar mais"
-                    " perto."
-                )
-              except Exception as e:
-                st.error(f"Erro ao transcrever: {e}")
-        with col_apagar:
-          if st.button("🗑️ Apagar Tudo"):
-            st.session_state["texto_transcrito_voz"] = ""
-            st.session_state["ultimo_audio_bytes"] = None
-            st.session_state["audio_key_id"] += 1
-            st.rerun()
-
-      relato_texto = st.text_area(
-          "Relato do Atendimento (Transcrito ou Digitado)",
-          value=st.session_state["texto_transcrito_voz"],
-          placeholder=(
-              "Ex: Gôndola organizada, colocado ponto extra de sachê..."
-          ),
-          height=200,
-      )
-
-      if st.button("💾 Enviar e Salvar Visita", type="primary"):
-        if (
-            not relato_texto
-            and not fotos_upload
-            and not st.session_state["ultimo_audio_bytes"]
-        ):
-          st.warning(
-              "Por favor, adicione pelo menos um relato, uma foto ou um áudio"
-              " antes de salvar."
+        lat = cliente_info.get("LATITUDE")
+        lon = cliente_info.get("LONGITUDE")
+        if pd.notna(lat) and pd.notna(lon):
+          maps_url = (
+              f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+          )
+          st.markdown(
+              f"🗺️ **Abrir localização no Google Maps:** [Clique aqui para abrir"
+              f" a rota]({maps_url})",
+              unsafe_allow_html=True,
           )
         else:
-          fotos_salvas = []
-          os.makedirs("fotos_visitas", exist_ok=True)
-          if fotos_upload:
-            from PIL import Image as PILImage, ImageOps
-
-            for idx, f in enumerate(fotos_upload):
-              try:
-                img = PILImage.open(f)
-                img = ImageOps.exif_transpose(img)
-                if img.mode in ("RGBA", "P"):
-                  img = img.convert("RGB")
-                img.thumbnail((1200, 1200))
-
-                f_path = os.path.join(
-                    "fotos_visitas",
-                    f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg",
-                )
-                img.save(f_path, "JPEG", quality=85)
-                fotos_salvas.append(f_path)
-              except Exception:
-                f_path = os.path.join(
-                    "fotos_visitas",
-                    f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg",
-                )
-                with open(f_path, "wb") as f_out:
-                  f_out.write(f.getbuffer())
-                fotos_salvas.append(f_path)
-
-          audio_salvo_path = None
-          if st.session_state["ultimo_audio_bytes"]:
-            os.makedirs("audios_visitas", exist_ok=True)
-            audio_salvo_path = os.path.join(
-                "audios_visitas",
-                f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}.wav",
-            )
-            with open(audio_salvo_path, "wb") as f_audio_out:
-              f_audio_out.write(st.session_state["ultimo_audio_bytes"])
-
-          hora_envio = datetime.now(FUSO_SP).strftime("%H:%M")
-
-          nova_visita = {
-              "id": datetime.now(FUSO_SP).strftime("%Y%m%d%H%M%S"),
-              "data": data_visita_input,
-              "hora": hora_envio,
-              "promotora": promotora_nome,
-              "codigo": str(cliente_info.get("CODIGO", "")),
-              "cliente": str(cliente_info.get("NOME", "")),
-              "cidade": str(cliente_info.get("CIDADE", "")),
-              "endereco": str(cliente_info.get("ENDEREÇO", "")),
-              "bairro": str(cliente_info.get("BAIRRO", "")),
-              "obs": str(cliente_info.get("OBS", "")),
-              "obs_2": str(cliente_info.get("OBS_2", "")),
-              "relato": relato_texto,
-              "fotos": fotos_salvas,
-              "audio_path": audio_salvo_path,
-          }
-
-          dados_existentes = carregar_dados()
-          dados_existentes.append(nova_visita)
-          salvar_dados(dados_existentes)
-
-          st.session_state["ultimo_audio_bytes"] = None
-          st.session_state["texto_transcrito_voz"] = ""
-          st.success(
-              "Visita registrada com sucesso, áudio e dados salvos com"
-              " segurança no JSON! 🚀"
+          st.write(
+              "🗺️ **Google Maps:** Coordenadas não disponíveis para este"
+              " cliente."
           )
+
+        st.markdown("---")
+
+        promotora_nome = st.text_input("Nome da Promotora", value="Fernanda")
+
+        st.markdown("📅 **Data da Visita**")
+        data_atual_sp = datetime.now(FUSO_SP).date()
+        data_visita_input = st.text_input(
+            "Digite a data (DD/MM/AAAA)",
+            value=data_atual_sp.strftime("%d/%m/%Y"),
+        )
+
+        st.markdown("### 📸 Fotos do Ponto de Venda")
+        st.info(
+            "💡 As fotos tiradas pelo celular são processadas automaticamente"
+            " (correção de rotação e redimensionamento para garantir o envio"
+            " perfeito)."
+        )
+        fotos_upload = st.file_uploader(
+            "Tirar ou carregar fotos da gôndola/exposição",
+            type=["jpg", "jpeg", "png", "heic", "webp"],
+            accept_multiple_files=True,
+        )
+
+        st.markdown("### 🎙️ Relato por Voz / Áudio (Transcrição)")
+        st.info(
+            "💡 A promotora pode ditar o áudio ou escrever o relato. O áudio"
+            " original ficará salvo para escuta no app!"
+        )
+
+        if "texto_transcrito_voz" not in st.session_state:
+          st.session_state["texto_transcrito_voz"] = ""
+        if "audio_key_id" not in st.session_state:
+          st.session_state["audio_key_id"] = 0
+        if "ultimo_audio_bytes" not in st.session_state:
+          st.session_state["ultimo_audio_bytes"] = None
+
+        audio_gravado = st.audio_input(
+            "🎙️ Grave o áudio falando as observações da loja:",
+            key=f"audio_input_{st.session_state['audio_key_id']}",
+        )
+
+        if audio_gravado is not None:
+          st.session_state["ultimo_audio_bytes"] = audio_gravado.getvalue()
+          col_transc, col_apagar = st.columns([3, 1])
+          with col_transc:
+            if st.button("✨ Transcrever Áudio em Texto"):
+              with st.spinner("Interpretando e transcrevendo áudio..."):
+                try:
+                  with tempfile.NamedTemporaryFile(
+                      delete=False, suffix=".wav"
+                  ) as f_audio:
+                    f_audio.write(st.session_state["ultimo_audio_bytes"])
+                    caminho_audio_temp = f_audio.name
+
+                  r = sr.Recognizer()
+                  with sr.AudioFile(caminho_audio_temp) as source:
+                    audio_data = r.record(source)
+                    texto_falado = r.recognize_google(
+                        audio_data, language="pt-BR"
+                    )
+                    st.session_state["texto_transcrito_voz"] = texto_falado
+                    st.success("✅ Áudio transcrito com sucesso!")
+                except sr.UnknownValueError:
+                  st.warning(
+                      "⚠️ Não foi possível entender o áudio. Tente falar mais"
+                      " perto."
+                  )
+                except Exception as e:
+                  st.error(f"Erro ao transcrever: {e}")
+          with col_apagar:
+            if st.button("🗑️ Apagar Tudo"):
+              st.session_state["texto_transcrito_voz"] = ""
+              st.session_state["ultimo_audio_bytes"] = None
+              st.session_state["audio_key_id"] += 1
+              st.rerun()
+
+        relato_texto = st.text_area(
+            "Relato do Atendimento (Transcrito ou Digitado)",
+            value=st.session_state["texto_transcrito_voz"],
+            placeholder=(
+                "Ex: Gôndola organizada, colocado ponto extra de sachê..."
+            ),
+            height=200,
+        )
+
+        if st.button("💾 Enviar e Salvar Visita", type="primary"):
+          if (
+              not relato_texto
+              and not fotos_upload
+              and not st.session_state["ultimo_audio_bytes"]
+          ):
+            st.warning(
+                "Por favor, adicione pelo menos um relato, uma foto ou um áudio"
+                " antes de salvar."
+            )
+          else:
+            fotos_salvas = []
+            os.makedirs("fotos_visitas", exist_ok=True)
+            if fotos_upload:
+              from PIL import Image as PILImage, ImageOps
+
+              for idx, f in enumerate(fotos_upload):
+                try:
+                  img = PILImage.open(f)
+                  img = ImageOps.exif_transpose(img)
+                  if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                  img.thumbnail((1200, 1200))
+
+                  f_path = os.path.join(
+                      "fotos_visitas",
+                      f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg",
+                  )
+                  img.save(f_path, "JPEG", quality=85)
+                  fotos_salvas.append(f_path)
+                except Exception:
+                  f_path = os.path.join(
+                      "fotos_visitas",
+                      f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}_{idx}.jpg",
+                  )
+                  with open(f_path, "wb") as f_out:
+                    f_out.write(f.getbuffer())
+                  fotos_salvas.append(f_path)
+
+            audio_salvo_path = None
+            if st.session_state["ultimo_audio_bytes"]:
+              os.makedirs("audios_visitas", exist_ok=True)
+              audio_salvo_path = os.path.join(
+                  "audios_visitas",
+                  f"{cliente_info['CODIGO']}_{datetime.now(FUSO_SP).strftime('%Y%m%d_%H%M%S')}.wav",
+              )
+              with open(audio_salvo_path, "wb") as f_audio_out:
+                f_audio_out.write(st.session_state["ultimo_audio_bytes"])
+
+            hora_envio = datetime.now(FUSO_SP).strftime("%H:%M")
+
+            nova_visita = {
+                "id": datetime.now(FUSO_SP).strftime("%Y%m%d%H%M%S"),
+                "data": data_visita_input,
+                "hora": hora_envio,
+                "promotora": promotora_nome,
+                "codigo": str(cliente_info.get("CODIGO", "")),
+                "cliente": str(cliente_info.get("NOME", "")),
+                "cidade": str(cliente_info.get("CIDADE", "")),
+                "endereco": str(cliente_info.get("ENDEREÇO", "")),
+                "bairro": str(cliente_info.get("BAIRRO", "")),
+                "obs": str(cliente_info.get("OBS", "")),
+                "obs_2": str(cliente_info.get("OBS_2", "")),
+                "relato": relato_texto,
+                "fotos": fotos_salvas,
+                "audio_path": audio_salvo_path,
+            }
+
+            dados_existentes = carregar_dados()
+            dados_existentes.append(nova_visita)
+            salvar_dados(dados_existentes)
+
+            st.session_state["ultimo_audio_bytes"] = None
+            st.session_state["texto_transcrito_voz"] = ""
+            st.success(
+                "Visita registrada com sucesso! A loja foi retirada da lista"
+                " de pendentes. 🚀"
+            )
+            st.rerun()
 
 elif menu == "Histórico de Visitas & PDF":
   st.subheader(
@@ -555,13 +574,15 @@ elif menu == "Histórico de Visitas & PDF":
     )
 
     if visita_para_apagar != "Nenhuma":
-      if st.button("🗑️ Apagar Visita Selecionada", type="secondary"):
+      if st.button(
+          "🗑️ Apagar Visita Selecionada (Retorna loja para a rota)",
+          type="secondary",
+      ):
         id_alvo = visita_opcoes[visita_para_apagar]
         dados_atualizados = [v for v in dados if v["id"] != id_alvo]
         salvar_dados(dados_atualizados)
         st.success(
-            "Visita apagada com sucesso do JSON! Atualize a página se"
-            " necessário."
+            "Visita apagada! A loja voltou a ficar disponível para visitação."
         )
         st.rerun()
 
